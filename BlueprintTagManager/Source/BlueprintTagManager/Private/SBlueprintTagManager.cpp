@@ -79,14 +79,18 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
                 [ SearchField(LOCTEXT("BlueprintSearch", "Blueprint search"), LOCTEXT("BlueprintHint", "Blueprint name or path"), &FBlueprintTagFilter::Blueprint) ]
                 + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 6, 0)
                 [ SearchField(LOCTEXT("ComponentSearch", "Component search"), LOCTEXT("ComponentHint", "Component name only"), &FBlueprintTagFilter::Component) ]
-                + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 6, 0)
-                [ SearchField(LOCTEXT("SourceSearch", "Source search"), LOCTEXT("SourceHint", "Source only"), &FBlueprintTagFilter::Source) ]
                 + SHorizontalBox::Slot().FillWidth(1)
                 [ SearchField(LOCTEXT("TagSearch", "Tag search"), LOCTEXT("TagHint", "Tag values only"), &FBlueprintTagFilter::Tags) ]
             ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
             [
                 SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6, 4))
+                + SWrapBox::Slot()
+                [ SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+                    .IsChecked_Lambda([this]() { return SearchFilter.bStaticMeshOnly ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+                    .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { SearchFilter.bStaticMeshOnly = State == ECheckBoxState::Checked; Filter(); })
+                    .ToolTipText(LOCTEXT("MeshOnlyHelp", "Show only StaticMeshComponent and derived component types, including ISM / HISM. Actor Tags stay separate. Blueprint summaries still include all components."))
+                    [ SNew(STextBlock).Text(LOCTEXT("MeshOnly", "StaticMesh only")) ] ]
                 + SWrapBox::Slot().VAlign(VAlign_Center)[ SNew(STextBlock).Text(LOCTEXT("Presence", "Tag filter:")) ]
                 + SWrapBox::Slot()[ PresenceButton(LOCTEXT("AllComponents", "All"), EBlueprintTagPresence::All) ]
                 + SWrapBox::Slot()[ PresenceButton(LOCTEXT("TaggedComponents", "With tags"), EBlueprintTagPresence::Tagged) ]
@@ -298,6 +302,12 @@ void SBlueprintTagManager::SetFilter(const FBlueprintTagFilter& Value) { SearchF
 bool SBlueprintTagManager::IsGroupExpanded(const TSharedPtr<FBlueprintTagOwnerRow>& Group) const
 { return OwnerTree && OwnerTree->IsItemExpanded(Group); }
 
+FReply SBlueprintTagManager::ToggleGroup(TSharedPtr<FBlueprintTagOwnerRow> Group)
+{
+    if (OwnerTree && Group && Group->bGroup) { OwnerTree->SetItemExpansion(Group, !OwnerTree->IsItemExpanded(Group)); }
+    return FReply::Handled();
+}
+
 FReply SBlueprintTagManager::ExpandGroups(bool bExpand)
 {
     for (const auto& Group : Groups) { OwnerTree->SetItemExpansion(Group, bExpand); }
@@ -455,26 +465,42 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
         TSharedPtr<FBlueprintTagOwnerRow> Item;
         FSimpleDelegate Changed;
         FOnClicked Open;
+        FOnClicked Toggle;
         void Construct(const FArguments&, const TSharedRef<STableViewBase>& Table,
-            TSharedPtr<FBlueprintTagOwnerRow> InItem, FSimpleDelegate InChanged, FOnClicked InOpen)
+            TSharedPtr<FBlueprintTagOwnerRow> InItem, FSimpleDelegate InChanged, FOnClicked InOpen, FOnClicked InToggle)
         {
-            Item = InItem; Changed = InChanged; Open = InOpen;
+            Item = InItem; Changed = InChanged; Open = InOpen; Toggle = InToggle;
             SMultiColumnTableRow::Construct(FSuperRowType::FArguments().Padding(4), Table);
         }
         virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& Column) override
         {
+            const bool bActor = !Item->bGroup && Item->Target.Kind == EBlueprintTagTargetKind::Actor;
+            const FSlateColor TextColor = bActor ? FSlateColor(FLinearColor(0.45f, 0.78f, 1.0f)) : FSlateColor::UseForeground();
+            const FSlateFontInfo Font = FAppStyle::GetFontStyle(bActor ? "BoldFont" : "NormalFont");
+            auto DecorateActor = [bActor](TSharedRef<SWidget> CellWidget) -> TSharedRef<SWidget>
+            {
+                if (!bActor) { return CellWidget; }
+                return SNew(SBorder).BorderImage(FAppStyle::GetBrush("WhiteBrush"))
+                    .BorderBackgroundColor(FLinearColor(0.035f, 0.075f, 0.12f)).Padding(FMargin(6, 4))[ CellWidget ];
+            };
             if (Column == "Target")
             {
                 const FString Label = Item->bGroup ? FPackageName::ObjectPathToObjectName(Item->AssetPath)
                     : Item->Target.Kind == EBlueprintTagTargetKind::Actor ? TEXT("Actor Tags") : Item->Target.Label;
                 TSharedRef<SWidget> Name = SNew(STextBlock).Text(FText::FromString(Label))
+                    .Font(Font).ColorAndOpacity(TextColor)
                     .ToolTipText(FText::FromString(Item->bGroup ? Item->AssetPath : Label)).OverflowPolicy(ETextOverflowPolicy::Ellipsis);
                 if (Item->bGroup)
                 {
-                    Name = SNew(SButton).ButtonStyle(FAppStyle::Get(), "SimpleButton").OnClicked(Open)
-                        .ToolTipText(FText::FromString(Item->AssetPath + TEXT("\nClick to open Blueprint")))[ Name ];
+                    Name = SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+                        [ SNew(SButton).ButtonStyle(FAppStyle::Get(), "SimpleButton").OnClicked(Toggle)
+                            .ToolTipText(FText::FromString(Item->AssetPath + TEXT("\nClick to expand / collapse")))[ Name ] ]
+                        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5, 0, 0, 0)
+                        [ SNew(SButton).Text(LOCTEXT("OpenBlueprint", "Open Blueprint")).OnClicked(Open)
+                            .ToolTipText(FText::FromString(Item->AssetPath)) ];
                 }
-                return SNew(SHorizontalBox)
+                return DecorateActor(SNew(SHorizontalBox)
                     + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ SNew(SExpanderArrow, SharedThis(this)) ]
                     + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 5, 0)
                     [ SNew(SCheckBox).IsEnabled(Item->CanCheck())
@@ -482,18 +508,20 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
                             : LOCTEXT("TargetCheck", "Select this target for batch editing."))
                         .IsChecked_Lambda([this]() { return Item->CheckState(); })
                         .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { Item->SetChecked(State == ECheckBoxState::Checked); Changed.ExecuteIfBound(); }) ]
-                    + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Name ];
+                    + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Name ]);
             }
             const FString Text = Item->bGroup
                 ? (Column == "Source" ? FString::Printf(TEXT("%d / %d components shown\n%s"), Item->MatchingComponents,
                     Item->TotalComponents, Item->AllTargetsHaveTags() ? TEXT("All targets have tags")
                         : Item->bActorHasTags ? TEXT("Actor tags: Present") : TEXT("Actor tags: None")) : Item->Summary)
-                : (Column == "Source" ? Item->Target.Source + (Item->Target.bEditable ? TEXT("") : TEXT(" (read only)"))
+                : (Column == "Source" ? (bActor ? FString(TEXT("Actor defaults")) : Item->Target.Source) + (Item->Target.bEditable ? TEXT("") : TEXT(" (read only)"))
                     : FBlueprintTagService::FormatTags(Item->Target.Tags));
-            return SNew(STextBlock).Text(FText::FromString(Text)).ToolTipText(FText::FromString(Text)).OverflowPolicy(ETextOverflowPolicy::Ellipsis);
+            return DecorateActor(SNew(STextBlock).Text(FText::FromString(Text)).Font(Font).ColorAndOpacity(TextColor)
+                .ToolTipText(FText::FromString(Text)).OverflowPolicy(ETextOverflowPolicy::Ellipsis));
         }
     };
-    return SNew(SOwnerRow, Owner, Item, FSimpleDelegate::CreateSP(this, &SBlueprintTagManager::InvalidatePreview), FOnClicked::CreateSP(this, &SBlueprintTagManager::OpenBlueprint, Item));
+    return SNew(SOwnerRow, Owner, Item, FSimpleDelegate::CreateSP(this, &SBlueprintTagManager::InvalidatePreview),
+        FOnClicked::CreateSP(this, &SBlueprintTagManager::OpenBlueprint, Item), FOnClicked::CreateSP(this, &SBlueprintTagManager::ToggleGroup, Item));
 }
 
 TSharedRef<ITableRow> SBlueprintTagManager::MakeInventoryRow(TSharedPtr<FBlueprintTagInventoryRow> Item, const TSharedRef<STableViewBase>& Owner)

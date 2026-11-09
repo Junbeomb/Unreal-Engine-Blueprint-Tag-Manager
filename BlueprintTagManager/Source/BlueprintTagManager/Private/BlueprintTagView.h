@@ -9,8 +9,8 @@ struct FBlueprintTagFilter
 {
     FString Blueprint;
     FString Component;
-    FString Source;
     FString Tags;
+    bool bStaticMeshOnly = true;
     EBlueprintTagPresence ComponentPresence = EBlueprintTagPresence::All;
     bool Matches(const FString& AssetPath, const FBlueprintTagTarget& Target) const;
 };

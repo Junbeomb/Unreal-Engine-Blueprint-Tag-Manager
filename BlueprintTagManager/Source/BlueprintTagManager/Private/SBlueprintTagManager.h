@@ -36,6 +36,7 @@ public:
     const TArray<TSharedPtr<FBlueprintTagOwnerRow>>& GetMatchingTargets() const { return MatchingRows; }
     bool IsGroupExpanded(const TSharedPtr<FBlueprintTagOwnerRow>& Group) const;
     FReply ExpandGroups(bool bExpand);
+    FReply ToggleGroup(TSharedPtr<FBlueprintTagOwnerRow> Group);
 
 private:
     bool CanWork() const;

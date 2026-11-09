@@ -61,7 +61,7 @@ else {
     $taskPaths = @(Get-ChildItem -LiteralPath $RepositoryRoot -File -Recurse -Force | ForEach-Object {
         $_.FullName.Substring($RepositoryRoot.Length + 1).Replace('\', '/')
     } | Where-Object {
-        $_ -match '^(README\.md|LICENSE|\.gitignore|\.gitattributes|Scripts/[^/]+\.ps1|BlueprintTagManager/(BlueprintTagManager\.uplugin|README\.ko\.md|VALIDATION\.ko\.md|LICENSE|Source/.+|Config/.+))$'
+        $_ -match '^(README\.md|LICENSE|\.gitignore|\.gitattributes|Scripts/[^/]+\.ps1|BlueprintTagManager/(BlueprintTagManager\.uplugin|README\.md|VALIDATION\.md|LICENSE|Source/.+|Config/.+))$'
     })
 }
 foreach ($taskRelativePath in ($taskPaths | Sort-Object -Unique)) {

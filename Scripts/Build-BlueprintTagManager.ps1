@@ -32,7 +32,7 @@ Copy-Item -LiteralPath $pluginFile -Destination $taskHostPlugin
 foreach ($taskSourceDirectory in @('Source', 'Config')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot ('BlueprintTagManager\' + $taskSourceDirectory)) -Destination $taskHostPlugin -Recurse
 }
-foreach ($taskDoc in @('README.ko.md', 'VALIDATION.ko.md', 'LICENSE')) {
+foreach ($taskDoc in @('README.md', 'VALIDATION.md', 'LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot ('BlueprintTagManager\' + $taskDoc)) -Destination $taskHostPlugin
 }
 $hostFile = Join-Path $taskHost 'HostProject.uproject'
@@ -82,7 +82,7 @@ if ($RunTests) {
     $reportFile = Join-Path $reportDir 'index.json'
     if (-not (Test-Path -LiteralPath $reportFile)) { throw 'Automation did not export a test report.' }
     $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
-    if ($report.failed -gt 0 -or $report.succeededWithWarnings -gt 0 -or $report.notRun -gt 0 -or $report.succeeded -ne 7) { throw "Tests incomplete or failed. See $reportFile" }
+    if ($report.failed -gt 0 -or $report.succeededWithWarnings -gt 0 -or $report.notRun -gt 0 -or $report.succeeded -ne 8) { throw "Tests incomplete or failed. See $reportFile" }
 }
 
 $taskVersion = (Get-Content -LiteralPath $pluginFile -Raw | ConvertFrom-Json).VersionName

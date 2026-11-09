@@ -9,6 +9,9 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Components/BoxComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
@@ -200,6 +203,20 @@ bool FBlueprintTagEditorTest::RunTest(const FString& Parameters)
         FBlueprintTagFilter Filter;
         Filter.Blueprint = Name;
         Widget->SetFilter(Filter);
+        TestTrue(TEXT("StaticMesh-only filter defaults on"), Filter.bStaticMeshOnly);
+        if (Widget->GetGroups().Num() == 1)
+        {
+            const auto Group = Widget->GetGroups()[0];
+            TestEqual(TEXT("Default view has separate actor plus StaticMesh component, not box"), Group->Children.Num(), 2);
+            TestEqual(TEXT("Default type filter shows one of two components"), Group->MatchingComponents, 1);
+            Widget->ToggleGroup(Group);
+            TestTrue(TEXT("Blueprint name action expands group"), Widget->IsGroupExpanded(Group));
+            Widget->ToggleGroup(Group);
+            TestFalse(TEXT("Blueprint name action collapses group"), Widget->IsGroupExpanded(Group));
+            TestEqual(TEXT("Name action does not open a Blueprint editor"), Kismet.GetBlueprintEditors().Num(), EditorsBefore);
+        }
+        Filter.bStaticMeshOnly = false;
+        Widget->SetFilter(Filter);
         TestEqual(TEXT("One Blueprint group instead of flat targets"), Widget->GetGroups().Num(), 1);
         if (Widget->GetGroups().Num() == 1)
         {
@@ -253,7 +270,8 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     Add(TEXT("/Game/Hero.Hero"), TEXT("Enemy"), TEXT("Native"), EBlueprintTagTargetKind::NativeComponent, {});
     Add(TEXT("/Game/Enemy.Enemy"), TEXT("Other"), TEXT("EnemyOrigin"), EBlueprintTagTargetKind::Component, { TEXT("Hero") });
     FBlueprintTagFilter Filter;
-    auto Build = [&]() { FBlueprintTagView::Build(Rows, Filter, Roots, Matches); };
+    // Exercise text/tag filters across all component types; type filtering has its own test.
+    auto Build = [&]() { Filter.bStaticMeshOnly = false; FBlueprintTagView::Build(Rows, Filter, Roots, Matches); };
     Build();
     TestEqual(TEXT("One root per Blueprint"), Roots.Num(), 2);
     TestEqual(TEXT("All targets match by default"), Matches.Num(), 4);
@@ -276,8 +294,6 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Blueprint search ignores tags and component names"), Matches.Num() == 1 && Matches[0] == Rows[3]);
     Filter = {}; Filter.Component = TEXT("Enemy"); Build();
     TestTrue(TEXT("Component search ignores Blueprint, source and tag values"), Matches.Num() == 1 && Matches[0] == Rows[2]);
-    Filter = {}; Filter.Source = TEXT("Enemy"); Build();
-    TestTrue(TEXT("Source search uses only source"), Matches.Num() == 1 && Matches[0] == Rows[3]);
     Filter = {}; Filter.Blueprint = TEXT("game hero"); Filter.Tags = TEXT("ENE"); Build();
     TestTrue(TEXT("Fields combine with case-insensitive AND terms"), Matches.Num() == 1 && Matches[0] == Rows[1]);
     Filter.Component = TEXT("Enemy"); Build();
@@ -351,6 +367,74 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     Filter = {}; Build();
     TestEqual(TEXT("All restores every Blueprint"), Roots.Num(), 7);
     TestEqual(TEXT("All restores every target"), Matches.Num(), 13);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintTagStaticMeshTest, "BlueprintTagManager.StaticMeshFilter",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
+{
+    using namespace BlueprintTagManagerTests;
+    UBlueprint* Blueprint = MakeBlueprint(AActor::StaticClass());
+    if (!TestNotNull(TEXT("Mesh filter Blueprint"), Blueprint)) { return false; }
+    USCS_Node* Box = Blueprint->SimpleConstructionScript->CreateNode(UBoxComponent::StaticClass(), TEXT("StaticMeshPretender"));
+    Box->ComponentTemplate->ComponentTags = { TEXT("HiddenBoxTag") };
+    Blueprint->SimpleConstructionScript->AddNode(Box);
+    auto Add = [Blueprint, Box](UClass* Class, const TCHAR* Name, TArray<FName> Tags)
+    {
+        USCS_Node* Node = Blueprint->SimpleConstructionScript->CreateNode(Class, Name);
+        Node->ComponentTemplate->ComponentTags = MoveTemp(Tags);
+        Box->AddChildNode(Node);
+    };
+    Add(UStaticMeshComponent::StaticClass(), TEXT("MeshWithoutAsset"), {});
+    Add(UInstancedStaticMeshComponent::StaticClass(), TEXT("Instanced"), { TEXT("ISMTag") });
+    Add(UHierarchicalInstancedStaticMeshComponent::StaticClass(), TEXT("Hierarchical"), { TEXT("HISMTag") });
+    Add(USkeletalMeshComponent::StaticClass(), TEXT("Skeletal"), { TEXT("SkeletalTag") });
+    CastChecked<AActor>(Blueprint->GeneratedClass->GetDefaultObject())->Tags = { TEXT("ActorTag") };
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    TArray<TSharedPtr<FBlueprintTagOwnerRow>> Rows, Roots, Matches;
+    for (auto Target : FBlueprintTagService::Gather(Blueprint))
+    {
+        auto Row = MakeShared<FBlueprintTagOwnerRow>();
+        Row->Blueprint = Blueprint; Row->AssetPath = Blueprint->GetPathName(); Row->Target = MoveTemp(Target); Rows.Add(Row);
+    }
+    FBlueprintTagFilter Filter;
+    auto Build = [&]() { FBlueprintTagView::Build(Rows, Filter, Roots, Matches); };
+    Build();
+    TestTrue(TEXT("StaticMesh only is on by default"), Filter.bStaticMeshOnly);
+    TestEqual(TEXT("Actor plus StaticMesh, ISM, HISM match by real class"), Matches.Num(), 4);
+    TestTrue(TEXT("Every displayed component derives from StaticMeshComponent"), !Matches.ContainsByPredicate([](const auto& Row)
+        { return Row->Target.Kind != EBlueprintTagTargetKind::Actor && !Row->Target.bStaticMeshComponent; }));
+    if (TestEqual(TEXT("One group"), Roots.Num(), 1))
+    {
+        TestEqual(TEXT("Whole-Blueprint component count is preserved"), Roots[0]->TotalComponents, 5);
+        TestEqual(TEXT("Three StaticMesh component types shown"), Roots[0]->MatchingComponents, 3);
+        TestTrue(TEXT("Whole-Blueprint summary still includes hidden component tags"), Roots[0]->Summary.Contains(TEXT("HiddenBoxTag")));
+        Roots[0]->SetChecked(true);
+        TestFalse(TEXT("Hidden components excluded from group batch selection"), Rows.ContainsByPredicate([](const auto& Row)
+            { return Row->Target.Kind != EBlueprintTagTargetKind::Actor && !Row->Target.bStaticMeshComponent && Row->bChecked; }));
+    }
+    Filter.ComponentPresence = EBlueprintTagPresence::Tagged; Build();
+    TestEqual(TEXT("Tagged filter combines with type filter"), Matches.Num(), 3);
+    Filter.ComponentPresence = EBlueprintTagPresence::Untagged; Build();
+    TestEqual(TEXT("Untagged filter keeps actor and empty static mesh"), Matches.Num(), 2);
+    TestTrue(TEXT("Unassigned StaticMesh asset still qualifies by component class"), Matches.ContainsByPredicate([](const auto& Row)
+        { return Row->Target.Label == TEXT("MeshWithoutAsset"); }));
+    Filter = {}; Filter.Component = TEXT("StaticMeshPretender"); Build();
+    TestEqual(TEXT("Class filter does not use component name"), Matches.Num(), 0);
+    Filter = {}; Filter.bStaticMeshOnly = false; Build();
+    TestEqual(TEXT("Turning off type filter restores all components and actor"), Matches.Num(), 6);
+    UBlueprint* Child = MakeBlueprint(Blueprint->GeneratedClass);
+    int32 InheritedMeshes = 0;
+    for (const auto& Target : FBlueprintTagService::Gather(Child))
+    {
+        if (Target.Kind == EBlueprintTagTargetKind::InheritedComponent && Target.bStaticMeshComponent) { ++InheritedMeshes; }
+    }
+    TestEqual(TEXT("Inherited mesh component classes detected"), InheritedMeshes, 3);
+    UBlueprint* Native = MakeBlueprint(AStaticMeshActor::StaticClass());
+    TestTrue(TEXT("Native C++ StaticMesh component detected"), FBlueprintTagService::Gather(Native).ContainsByPredicate([](const auto& Target)
+        { return Target.Kind == EBlueprintTagTargetKind::NativeComponent && Target.bStaticMeshComponent; }));
     return true;
 }
 

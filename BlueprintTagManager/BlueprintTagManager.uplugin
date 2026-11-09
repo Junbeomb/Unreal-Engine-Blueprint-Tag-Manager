@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
-  "Version": 4,
-  "VersionName": "1.2.1",
+  "Version": 1,
+  "VersionName": "1.0.0",
   "FriendlyName": "Blueprint Tag Manager",
   "Description": "Manage Actor Tags and Component Tags across all project Actor Blueprints from the main editor.",
   "Category": "Editor",

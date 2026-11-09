@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Path $taskBinaryStage | Out-Null
 foreach ($taskBinary in @('UnrealEditor-BlueprintTagManager.dll', 'UnrealEditor.modules')) {
     Copy-Item -LiteralPath (Join-Path $BuiltPluginDirectory ('Binaries\Win64\' + $taskBinary)) -Destination $taskBinaryStage
 }
-foreach ($taskDoc in @('README.ko.md', 'VALIDATION.ko.md', 'LICENSE')) {
+foreach ($taskDoc in @('README.md', 'VALIDATION.md', 'LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot ('BlueprintTagManager\' + $taskDoc)) -Destination $taskPluginStage
 }
 Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'), (Join-Path $taskRoot 'LICENSE') -Destination $taskStage

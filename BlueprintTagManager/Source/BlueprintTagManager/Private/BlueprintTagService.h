@@ -19,6 +19,7 @@ struct FBlueprintTagTarget
     TWeakObjectPtr<USCS_Node> Node;
     TArray<FName> Tags;
     bool bEditable = false;
+    bool bStaticMeshComponent = false;
 };
 
 struct FBlueprintTagChange

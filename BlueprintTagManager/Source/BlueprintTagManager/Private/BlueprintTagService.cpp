@@ -1,6 +1,7 @@
 #include "BlueprintTagService.h"
 
 #include "Components/ActorComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -59,6 +60,7 @@ TArray<FBlueprintTagTarget> FBlueprintTagService::Gather(UBlueprint* Blueprint)
             Target.Object = Template;
             Target.Node = Node;
             Target.Tags = Template->ComponentTags;
+            Target.bStaticMeshComponent = Template->IsA<UStaticMeshComponent>();
             Target.bEditable = !bInherited || (bEnableInherited && Template->IsEditableWhenInherited()
                 && FComponentKey(Node).IsValid());
         }
@@ -75,6 +77,7 @@ TArray<FBlueprintTagTarget> FBlueprintTagService::Gather(UBlueprint* Blueprint)
         Target.Kind = EBlueprintTagTargetKind::NativeComponent;
         Target.Object = Component;
         Target.Tags = Component->ComponentTags;
+        Target.bStaticMeshComponent = Component->IsA<UStaticMeshComponent>();
         Target.bEditable = Component->IsIn(CDO) && Component->IsEditableWhenInherited();
     }
     return Result;
