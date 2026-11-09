@@ -24,7 +24,7 @@ Full test names use the prefix `BlueprintTagManager.` followed by the test name 
 
 Public release checks scan source and archive contents for private profile paths and known token patterns. DLL checks also reject embedded absolute Windows paths. Diagnostic source paths are recorded relatively. Logs, PDBs, HostProject, Intermediate, and private Git configuration are excluded. The MIT license for original code and scripts is included.
 
-Before a public commit, configure a public Git author name and GitHub noreply email, then run `Scripts/Test-PublicRelease.ps1 -CheckGitIdentity`. Pattern checks are not an exhaustive secret detector.
+Pattern checks detect common private paths and known token formats; they are not an exhaustive secret detector.
 
 ## Clean installation check
 

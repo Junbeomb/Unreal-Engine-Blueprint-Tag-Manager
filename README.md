@@ -35,7 +35,7 @@ Install UE 5.7 plus Visual Studio 2022 with **Game development with C++**, a sup
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Build-BlueprintTagManager.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.7' -RunTests
 ```
 
-Set `-EngineRoot` to your engine installation. The script creates a fresh disposable HostProject and prints the built plugin and checked release ZIP locations. `-OutputDirectory` must be a fresh, short ASCII path, at most 100 characters. The default is a new `BTM-<timestamp>` folder in the system temporary directory. No original developer account, folder, or project is required.
+Set `-EngineRoot` to your engine installation. The script creates a fresh disposable HostProject and prints the built plugin and checked release ZIP locations. `-OutputDirectory` must be a fresh, short ASCII path, at most 100 characters. The default is a new `BTM-<timestamp>` folder in the system temporary directory.
 
 ## Scope and limits
 
@@ -45,22 +45,13 @@ Set `-EngineRoot` to your engine installation. The script creates a fresh dispos
 - FName matching is case-insensitive. Case-only renames are no-ops. Empty/None tag inputs are rejected. Read-only inherited components are displayed but cannot be checked.
 - The plugin has no network service, account, telemetry, or third-party plugin dependency. Unreal Engine and its tools can have their own network behavior.
 
-## Before publishing
+## Feedback and contributions
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Test-PublicRelease.ps1 -CheckGitIdentity
-```
+For bug reports, include your Unreal Engine version, Windows version, steps to reproduce the issue, and the expected and actual behavior. A minimal reproduction project or relevant log excerpt can help explain the problem.
 
-Add `-ArchivePath <release ZIP>` to inspect its files and DLL. The check looks for common private-path and token patterns; it is not an exhaustive secret detector. Binaries, logs, debug symbols, caches, local credentials, and release ZIPs are ignored by Git. Publish the checked ZIP separately as a release asset; do not force-add ignored build folders.
+For feature requests, describe the task you want to accomplish and how the proposed feature would improve that workflow.
 
-Commit author names and emails are public. Configure a public name and your exact GitHub-provided noreply address in this repository before committing:
-
-```powershell
-git config --local user.name 'YOUR_PUBLIC_NAME'
-git config --local user.email 'ID+USERNAME@users.noreply.github.com'
-```
-
-See [GitHub's commit email documentation](https://docs.github.com/en/account-and-profile/how-tos/email-preferences/setting-your-commit-email-address).
+When submitting a code change, explain its purpose and include validation results. Use the source build command above with `-RunTests` to run the plugin's automation tests.
 
 ## License
 

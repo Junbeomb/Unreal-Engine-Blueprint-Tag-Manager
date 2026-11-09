@@ -87,12 +87,16 @@ Install Unreal Engine 5.7 and Visual Studio 2022 with **Game development with C+
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Build-BlueprintTagManager.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.7' -RunTests
 ```
 
-Set `-EngineRoot` to your engine installation. The script uses the engine's bundled .NET runtime and creates a separate HostProject. It prints the built plugin and checked release ZIP paths. An explicit `-OutputDirectory` must be a new, short ASCII path of at most 100 characters. The default is a new temporary directory. The original developer's account or project is not required.
+Set `-EngineRoot` to your engine installation. The script uses the engine's bundled .NET runtime and creates a separate HostProject. It prints the built plugin and checked release ZIP paths. An explicit `-OutputDirectory` must be a new, short ASCII path of at most 100 characters. The default is a new temporary directory.
 
 The build records diagnostic source paths relatively. The public ZIP includes the DLL, module manifest, source, configuration, documentation, scripts, and MIT license. Logs, PDBs, caches, HostProject, and Intermediate are excluded.
 
-## Publishing and license
+## Feedback and contributions
 
-Run `Scripts/Test-PublicRelease.ps1 -CheckGitIdentity` before a public commit. Add `-ArchivePath <release ZIP>` to inspect the archive and DLL. Configure a public Git author name and your exact GitHub-provided noreply email in the repository. Pattern checks detect common private paths and tokens but are not an exhaustive secret detector.
+For bug reports, include your Unreal Engine version, Windows version, reproduction steps, and the expected and actual behavior. For feature requests, describe the workflow you want to improve.
+
+When submitting a code change, explain its purpose and include validation results from the source build command with `-RunTests`.
+
+## License
 
 Original plugin code and scripts use the included [MIT License](LICENSE). Unreal Engine is a separate dependency under Epic's license.
