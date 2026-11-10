@@ -22,8 +22,13 @@
 #include "Engine/StaticMeshActor.h"
 #include "GameFramework/Actor.h"
 #include "Framework/Docking/TabManager.h"
+#include "Framework/Application/SlateApplication.h"
+#include "ImageUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
@@ -31,6 +36,7 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Widgets/SWindow.h"
 
 namespace BlueprintTagManagerTests
 {
@@ -192,6 +198,27 @@ bool FBlueprintTagEditorTest::RunTest(const FString& Parameters)
     {
         const auto Widget = StaticCastSharedRef<SBlueprintTagManager>(Tab->GetContent());
         Widget->SlatePrepass();
+        auto CaptureUI = [this, &Widget](const TCHAR* Filename)
+        {
+            if (!FParse::Param(FCommandLine::Get(), TEXT("BTMCaptureUI"))) { return; }
+            if (const auto Window = FSlateApplication::Get().FindWidgetWindow(Widget)) { Window->Resize(FVector2D(1280, 960)); }
+            FSlateApplication::Get().Tick();
+            Widget->SlatePrepass();
+            TArray<FColor> Pixels;
+            FIntVector Size;
+            if (!TestTrue(TEXT("Capture rendered panel"), FSlateApplication::Get().TakeScreenshot(Widget, Pixels, Size))) { return; }
+            TArray64<uint8> PNG;
+            FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, PNG);
+            TestTrue(TEXT("Save panel capture"), FFileHelper::SaveArrayToFile(PNG, *FPaths::Combine(FPaths::ProjectSavedDir(), Filename)));
+        };
+        TestFalse(TEXT("Opening the panel does not request a scan"), Widget->IsScanInProgress());
+        for (int32 Frame = 0; Frame < 32; ++Frame) { Widget->Tick(FGeometry(), FPlatformTime::Seconds(), 0.016f); }
+        TestFalse(TEXT("Idle ticks do not start a project scan"), Widget->IsScanInProgress());
+        TestEqual(TEXT("No Blueprints loaded before Scan project is clicked"), Widget->GetBlueprintCount(), 0);
+        TestEqual(TEXT("No targets collected before Scan project is clicked"), Widget->GetTargetCount(), 0);
+        CaptureUI(TEXT("BlueprintTagManager-Idle.png"));
+        Widget->RequestScan();
+        TestTrue(TEXT("Scan project action requests a scan"), Widget->IsScanInProgress());
         for (int32 Frame = 0; Frame < 200 && Widget->IsScanInProgress(); ++Frame)
         {
             Widget->Tick(FGeometry(), FPlatformTime::Seconds(), 0.016f);
@@ -227,6 +254,7 @@ bool FBlueprintTagEditorTest::RunTest(const FString& Parameters)
             Group->SetChecked(true);
             Widget->ExpandGroups(true);
             TestTrue(TEXT("Blueprint can expand"), Widget->IsGroupExpanded(Group));
+            CaptureUI(TEXT("BlueprintTagManager-Expanded.png"));
             Widget->ExpandGroups(false);
             TestFalse(TEXT("Blueprint can collapse again"), Widget->IsGroupExpanded(Group));
             TSet<FString> Selected;

@@ -29,6 +29,7 @@ public:
     virtual void PostUndo(bool bSuccess) override;
     virtual void PostRedo(bool bSuccess) override;
     bool IsScanInProgress() const { return bScanRequested || bScanning; }
+    FReply RequestScan();
     int32 GetBlueprintCount() const { return Blueprints.Num(); }
     int32 GetTargetCount() const { return Rows.Num(); }
     void SetFilter(const FBlueprintTagFilter& Value);
@@ -40,6 +41,7 @@ public:
 
 private:
     bool CanWork() const;
+    bool CanEditResults() const { return CanWork() && bHasScanned && !IsScanInProgress(); }
     void BeginScan();
     void ScanNext();
     void AddBlueprintRows(UBlueprint* Blueprint, const TMap<FString, bool>& Checks);
@@ -84,7 +86,8 @@ private:
     int32 FailedAssets = 0;
     int32 SkippedAssets = 0;
     bool bScanning = false;
-    bool bScanRequested = true;
+    bool bScanRequested = false;
+    bool bHasScanned = false;
     bool bCanceled = false;
     bool bRefreshRequested = false;
     bool bWasEditable = true;

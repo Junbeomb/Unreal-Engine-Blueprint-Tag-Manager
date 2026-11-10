@@ -16,6 +16,9 @@
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SSeparator.h"
+#include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/SHeaderRow.h"
@@ -25,6 +28,18 @@
 
 void SBlueprintTagManager::Construct(const FArguments& InArgs)
 {
+    auto Section = [](const FText& Heading, const FText& Tip, TSharedRef<SWidget> Body) -> TSharedRef<SWidget>
+    {
+        return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder")).Padding(8)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight()
+            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(Heading).ToolTipText(Tip) ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 5)
+            [ SNew(SSeparator) ]
+            + SVerticalBox::Slot().FillHeight(1)[ Body ]
+        ];
+    };
     auto SearchField = [this](const FText& Label, const FText& Hint, FString FBlueprintTagFilter::* Field)
     {
         return SNew(SVerticalBox)
@@ -46,142 +61,198 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
         GEditor->RegisterForUndo(this);
         CompileHandle = GEditor->OnBlueprintCompiled().AddSP(this, &SBlueprintTagManager::QueueRefresh);
     }
-    ChildSlot
-    [
-        SNew(SBorder).Padding(10)
+
+    const auto ScanPanel = Section(LOCTEXT("ScanHeading", "Project scan"),
+        LOCTEXT("ScanTip", "Choose the content scope, then click Scan project. Opening this panel does not scan."),
+        SNew(SScrollBox)
+        + SScrollBox::Slot()
         [
             SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 3)
+            [ SNew(STextBlock).Text(LOCTEXT("FolderLabel", "Content folder")) ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
-            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Title", "Project Blueprint Tag Manager")) ]
-            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
-            [ SNew(STextBlock).AutoWrapText(true).Text(LOCTEXT("Help", "Expand a Blueprint to select its Actor Tags or components. Group checkboxes select matching targets, including collapsed children. Preview lists every change before Apply.")) ]
+            [ SAssignNew(FolderInput, SEditableTextBox)
+                .HintText(LOCTEXT("Folder", "Blank = all project content; e.g. /Game/Characters"))
+                .IsEnabled_Lambda([this]() { return CanWork() && !IsScanInProgress(); }) ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
             [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().FillWidth(1)
-                [ SAssignNew(FolderInput, SEditableTextBox)
-                    .HintText(LOCTEXT("Folder", "Folder: blank = all project content; e.g. /Game/Characters"))
-                    .IsEnabled_Lambda([this]() { return CanWork() && !bScanning; }) ]
-                + SHorizontalBox::Slot().AutoWidth().Padding(5, 0)
-                [ SNew(SButton).Text(LOCTEXT("Scan", "Scan project")).IsEnabled_Lambda([this]() { return CanWork() && !bScanning; })
-                    .OnClicked_Lambda([this]() { bScanRequested = true; return FReply::Handled(); }) ]
-                + SHorizontalBox::Slot().AutoWidth()
+                SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
+                + SWrapBox::Slot()
+                [ SNew(SButton).ButtonStyle(FAppStyle::Get(), "PrimaryButton").Text(LOCTEXT("Scan", "Scan project"))
+                    .IsEnabled_Lambda([this]() { return CanWork() && !IsScanInProgress(); })
+                    .OnClicked(this, &SBlueprintTagManager::RequestScan) ]
+                + SWrapBox::Slot()
                 [ SNew(SButton).Text(LOCTEXT("CancelScan", "Cancel scan")).IsEnabled_Lambda([this]() { return bScanning; })
                     .OnClicked_Lambda([this]() { bScanning = false; bCanceled = true; Filter(); return FReply::Handled(); }) ]
             ]
-            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
+            + SVerticalBox::Slot().AutoHeight()
             [ SNew(STextBlock).AutoWrapText(true).Text(this, &SBlueprintTagManager::GetScanText)
                 .ToolTipText_Lambda([this]() { return FText::FromString(ScanFailures); }) ]
+        ]);
+
+    const auto SearchPanel = Section(LOCTEXT("SearchHeading", "Search"),
+        LOCTEXT("SearchTip", "All nonempty fields and space-separated terms must match. Search does not scan content."),
+        SNew(SScrollBox)
+        + SScrollBox::Slot()
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
+            [ SearchField(LOCTEXT("BlueprintSearch", "Blueprint search"), LOCTEXT("BlueprintHint", "Blueprint name or path"), &FBlueprintTagFilter::Blueprint) ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
+            [ SearchField(LOCTEXT("ComponentSearch", "Component search"), LOCTEXT("ComponentHint", "Component name only"), &FBlueprintTagFilter::Component) ]
+            + SVerticalBox::Slot().AutoHeight()
+            [ SearchField(LOCTEXT("TagSearch", "Tag search"), LOCTEXT("TagHint", "Tag values only"), &FBlueprintTagFilter::Tags) ]
+        ]);
+
+    const auto FilterPanel = Section(LOCTEXT("FilterHeading", "Filters"),
+        LOCTEXT("FilterTip", "Type and tag-presence filters combine with the search fields. Excluded targets are excluded from batch edits."),
+        SNew(SScrollBox)
+        + SScrollBox::Slot()
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
+            [ SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+                .IsChecked_Lambda([this]() { return SearchFilter.bStaticMeshOnly ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+                .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { SearchFilter.bStaticMeshOnly = State == ECheckBoxState::Checked; Filter(); })
+                .ToolTipText(LOCTEXT("MeshOnlyHelp", "Show only StaticMeshComponent and derived component types, including ISM / HISM. Actor Tags stay separate. Blueprint summaries still include all components."))
+                [ SNew(STextBlock).Text(LOCTEXT("MeshOnly", "StaticMesh only")) ] ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 3)
+            [ SNew(STextBlock).Text(LOCTEXT("Presence", "Tag presence")) ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
             [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 6, 0)
-                [ SearchField(LOCTEXT("BlueprintSearch", "Blueprint search"), LOCTEXT("BlueprintHint", "Blueprint name or path"), &FBlueprintTagFilter::Blueprint) ]
-                + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 6, 0)
-                [ SearchField(LOCTEXT("ComponentSearch", "Component search"), LOCTEXT("ComponentHint", "Component name only"), &FBlueprintTagFilter::Component) ]
-                + SHorizontalBox::Slot().FillWidth(1)
-                [ SearchField(LOCTEXT("TagSearch", "Tag search"), LOCTEXT("TagHint", "Tag values only"), &FBlueprintTagFilter::Tags) ]
-            ]
-            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
-            [
-                SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6, 4))
-                + SWrapBox::Slot()
-                [ SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
-                    .IsChecked_Lambda([this]() { return SearchFilter.bStaticMeshOnly ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-                    .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { SearchFilter.bStaticMeshOnly = State == ECheckBoxState::Checked; Filter(); })
-                    .ToolTipText(LOCTEXT("MeshOnlyHelp", "Show only StaticMeshComponent and derived component types, including ISM / HISM. Actor Tags stay separate. Blueprint summaries still include all components."))
-                    [ SNew(STextBlock).Text(LOCTEXT("MeshOnly", "StaticMesh only")) ] ]
-                + SWrapBox::Slot().VAlign(VAlign_Center)[ SNew(STextBlock).Text(LOCTEXT("Presence", "Tag filter:")) ]
+                SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
                 + SWrapBox::Slot()[ PresenceButton(LOCTEXT("AllComponents", "All"), EBlueprintTagPresence::All) ]
                 + SWrapBox::Slot()[ PresenceButton(LOCTEXT("TaggedComponents", "With tags"), EBlueprintTagPresence::Tagged) ]
                 + SWrapBox::Slot()[ PresenceButton(LOCTEXT("UntaggedComponents", "Without tags"), EBlueprintTagPresence::Untagged) ]
-                + SWrapBox::Slot().VAlign(VAlign_Center)
-                [ SNew(STextBlock).Text_Lambda([this]()
-                    {
-                        if (SearchFilter.ComponentPresence == EBlueprintTagPresence::Tagged)
-                        { return LOCTEXT("TaggedScope", "Tagged Blueprints only; tagged Actor / component targets."); }
-                        if (SearchFilter.ComponentPresence == EBlueprintTagPresence::Untagged)
-                        { return LOCTEXT("UntaggedScope", "All Blueprints; Actor Tags and untagged components."); }
-                        return LOCTEXT("AllScope", "All Blueprints, Actor Tags and components.");
-                    }) ]
-                + SWrapBox::Slot()
-                [ SNew(SButton).Text(LOCTEXT("Refresh", "Refresh tags")).IsEnabled_Lambda([this]() { return CanWork() && !bScanning; })
-                    .OnClicked_Lambda([this]() { RefreshRows(); return FReply::Handled(); }) ]
-                + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("ExpandAll", "Expand all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, true) ]
-                + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("CollapseAll", "Collapse all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, false) ]
             ]
+            + SVerticalBox::Slot().AutoHeight()
+            [ SNew(STextBlock).AutoWrapText(true).Text_Lambda([this]()
+                {
+                    if (SearchFilter.ComponentPresence == EBlueprintTagPresence::Tagged)
+                    { return LOCTEXT("TaggedScope", "Tagged targets only. Type and search filters also apply."); }
+                    if (SearchFilter.ComponentPresence == EBlueprintTagPresence::Untagged)
+                    { return LOCTEXT("UntaggedScope", "Keep Actor Tags; show untagged components. Other filters also apply."); }
+                    return LOCTEXT("AllScope", "All tag states. Type and search filters also apply.");
+                }) ]
+        ]);
+
+    const auto BlueprintPanel = Section(LOCTEXT("BlueprintHeading", "Blueprints & components"),
+        LOCTEXT("BlueprintTip", "Expand a Blueprint to select its Actor Tags or components. Drag column header dividers to adjust column widths."),
+        SNew(SVerticalBox)
+        + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+        [
+            SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
+            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("All", "Check matches")).IsEnabled_Lambda([this]() { return CanEditResults(); }).OnClicked(this, &SBlueprintTagManager::CheckMatches, true) ]
+            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("None", "Uncheck matches")).IsEnabled_Lambda([this]() { return CanEditResults(); }).OnClicked(this, &SBlueprintTagManager::CheckMatches, false) ]
+            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Refresh", "Refresh tags")).IsEnabled_Lambda([this]() { return CanEditResults(); })
+                .OnClicked_Lambda([this]() { RefreshRows(); return FReply::Handled(); }) ]
+            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("ExpandAll", "Expand all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, true) ]
+            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("CollapseAll", "Collapse all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, false) ]
+        ]
+        + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+        [ SNew(STextBlock).AutoWrapText(true).Text(this, &SBlueprintTagManager::GetSelectionText) ]
+        + SVerticalBox::Slot().FillHeight(1)
+        [
+            SAssignNew(OwnerTree, STreeView<TSharedPtr<FBlueprintTagOwnerRow>>).TreeItemsSource(&Groups)
+            .SelectionMode(ESelectionMode::None).OnGenerateRow(this, &SBlueprintTagManager::MakeOwnerRow)
+            .OnGetChildren_Lambda([](TSharedPtr<FBlueprintTagOwnerRow> Item, TArray<TSharedPtr<FBlueprintTagOwnerRow>>& Children) { Children.Append(Item->Children); })
+            .OnExpansionChanged_Lambda([this](TSharedPtr<FBlueprintTagOwnerRow> Item, bool bExpanded)
+                { if (bExpanded) { ExpandedAssets.Add(Item->AssetPath); } else { ExpandedAssets.Remove(Item->AssetPath); } })
+            .IsEnabled_Lambda([this]() { return CanEditResults(); })
+            .HeaderRow(SNew(SHeaderRow)
+                + SHeaderRow::Column("Target").DefaultLabel(LOCTEXT("Target", "Blueprint / Actor / Component")).FillWidth(0.35f)
+                + SHeaderRow::Column("Source").DefaultLabel(LOCTEXT("Source", "Source / Matching targets")).FillWidth(0.25f)
+                + SHeaderRow::Column("Tags").DefaultLabel(LOCTEXT("Tags", "Tags / Blueprint summary")).FillWidth(0.4f))
+        ]);
+
+    const auto InventoryPanel = Section(LOCTEXT("InventoryHeading", "Tag inventory"),
+        LOCTEXT("InventoryTip", "Tags across matching targets, including collapsed children. Click a tag to fill Existing tag."),
+        SAssignNew(InventoryList, SListView<TSharedPtr<FBlueprintTagInventoryRow>>).ListItemsSource(&Inventory)
+            .SelectionMode(ESelectionMode::Single).OnGenerateRow(this, &SBlueprintTagManager::MakeInventoryRow)
+            .OnSelectionChanged_Lambda([this](TSharedPtr<FBlueprintTagInventoryRow> Item, ESelectInfo::Type)
+                { if (Item && OldTagInput) { OldTagInput->SetText(FText::FromName(Item->Tag)); } }));
+
+    const auto BatchPanel = Section(LOCTEXT("BatchHeading", "Batch edit"),
+        LOCTEXT("BatchTip", "Set tag names, then preview an operation for the checked matching targets."),
+        SNew(SScrollBox)
+        + SScrollBox::Slot()
+        [
+            SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
             [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().AutoWidth()
-                [ SNew(SButton).Text(LOCTEXT("All", "Check matches")).IsEnabled_Lambda([this]() { return CanWork() && !bScanning; }).OnClicked(this, &SBlueprintTagManager::CheckMatches, true) ]
-                + SHorizontalBox::Slot().AutoWidth().Padding(5, 0)
-                [ SNew(SButton).Text(LOCTEXT("None", "Uncheck matches")).IsEnabled_Lambda([this]() { return !bScanning; }).OnClicked(this, &SBlueprintTagManager::CheckMatches, false) ]
-                + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
-                [ SNew(STextBlock).Text(this, &SBlueprintTagManager::GetSelectionText) ]
-            ]
-            + SVerticalBox::Slot().FillHeight(0.5f)
-            [
-                SAssignNew(OwnerTree, STreeView<TSharedPtr<FBlueprintTagOwnerRow>>).TreeItemsSource(&Groups)
-                .SelectionMode(ESelectionMode::None).OnGenerateRow(this, &SBlueprintTagManager::MakeOwnerRow)
-                .OnGetChildren_Lambda([](TSharedPtr<FBlueprintTagOwnerRow> Item, TArray<TSharedPtr<FBlueprintTagOwnerRow>>& Children) { Children.Append(Item->Children); })
-                .OnExpansionChanged_Lambda([this](TSharedPtr<FBlueprintTagOwnerRow> Item, bool bExpanded)
-                { if (bExpanded) { ExpandedAssets.Add(Item->AssetPath); } else { ExpandedAssets.Remove(Item->AssetPath); } })
-                .IsEnabled_Lambda([this]() { return CanWork() && !bScanning; })
-                .HeaderRow(SNew(SHeaderRow)
-                    + SHeaderRow::Column("Target").DefaultLabel(LOCTEXT("Target", "Blueprint / Actor / Component")).FillWidth(0.35f)
-                    + SHeaderRow::Column("Source").DefaultLabel(LOCTEXT("Source", "Source / Matching targets")).FillWidth(0.25f)
-                    + SHeaderRow::Column("Tags").DefaultLabel(LOCTEXT("Tags", "Tags / Blueprint summary")).FillWidth(0.4f))
-            ]
-            + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 3)
-            [ SNew(STextBlock).Text(LOCTEXT("Inventory", "Tags across matching targets, including collapsed children (click to fill Existing tag)")) ]
-            + SVerticalBox::Slot().FillHeight(0.2f)
-            [
-                SAssignNew(InventoryList, SListView<TSharedPtr<FBlueprintTagInventoryRow>>).ListItemsSource(&Inventory)
-                .SelectionMode(ESelectionMode::Single).OnGenerateRow(this, &SBlueprintTagManager::MakeInventoryRow)
-                .OnSelectionChanged_Lambda([this](TSharedPtr<FBlueprintTagInventoryRow> Item, ESelectInfo::Type)
-                { if (Item && OldTagInput) { OldTagInput->SetText(FText::FromName(Item->Tag)); } })
-            ]
-            + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 4)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 5, 0)
+                SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
+                + SSplitter::Slot().Value(0.5f).MinSize(100)
                 [ SAssignNew(OldTagInput, SEditableTextBox).HintText(LOCTEXT("Old", "Existing tag (rename / remove)"))
                     .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }) ]
-                + SHorizontalBox::Slot().FillWidth(1)
+                + SSplitter::Slot().Value(0.5f).MinSize(100)
                 [ SAssignNew(NewTagInput, SEditableTextBox).HintText(LOCTEXT("New", "New tag (add / rename)"))
                     .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }) ]
             ]
-            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+            + SVerticalBox::Slot().AutoHeight()
             [
                 SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
-                .IsEnabled_Lambda([this]() { return CanWork() && !bScanning; })
+                .IsEnabled_Lambda([this]() { return CanEditResults(); })
                 + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Add", "Preview add")).OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Add) ]
                 + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Rename", "Preview rename")).OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Rename) ]
                 + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Remove", "Preview remove")).OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Remove) ]
                 + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Clear", "Preview clear")).OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Clear) ]
                 + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Dedupe", "Preview deduplicate")).OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Deduplicate) ]
-                + SWrapBox::Slot()[ SNew(SButton).ButtonStyle(FAppStyle::Get(), "PrimaryButton").Text(LOCTEXT("Apply", "Apply preview"))
-                    .IsEnabled_Lambda([this]() { return !PendingChanges.IsEmpty(); }).OnClicked(this, &SBlueprintTagManager::ApplyPreview) ]
             ]
-            + SVerticalBox::Slot().FillHeight(0.3f).MinHeight(60)
-            [
-                SAssignNew(PreviewList, SListView<TSharedPtr<FString>>).ListItemsSource(&PreviewRows).SelectionMode(ESelectionMode::None)
-                .OnGenerateRow_Lambda([](TSharedPtr<FString> Item, const TSharedRef<STableViewBase>& Owner)
+        ]);
+
+    const auto PreviewPanel = Section(LOCTEXT("PreviewHeading", "Change preview"),
+        LOCTEXT("PreviewTip", "Review the per-asset changes before applying. Apply is one Undo step and does not save assets."),
+        SNew(SVerticalBox)
+        + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+        [ SNew(SButton).ButtonStyle(FAppStyle::Get(), "PrimaryButton").Text(LOCTEXT("Apply", "Apply preview"))
+            .IsEnabled_Lambda([this]() { return CanEditResults() && !PendingChanges.IsEmpty(); }).OnClicked(this, &SBlueprintTagManager::ApplyPreview) ]
+        + SVerticalBox::Slot().FillHeight(1)
+        [
+            SAssignNew(PreviewList, SListView<TSharedPtr<FString>>).ListItemsSource(&PreviewRows).SelectionMode(ESelectionMode::None)
+            .OnGenerateRow_Lambda([](TSharedPtr<FString> Item, const TSharedRef<STableViewBase>& Owner)
                 { return SNew(STableRow<TSharedPtr<FString>>, Owner).Padding(4)[ SNew(STextBlock).Text(FText::FromString(*Item)).AutoWrapText(true) ]; })
+        ]);
+
+    ChildSlot
+    [
+        SNew(SBorder).Padding(8)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Title", "Project Blueprint Tag Manager")) ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
+            [ SNew(STextBlock).AutoWrapText(true).Text(LOCTEXT("Help", "Click Scan project to load targets. Drag the dividers between sections or column headers to adjust their sizes.")) ]
+            + SVerticalBox::Slot().FillHeight(1)
+            [
+                SNew(SSplitter).Orientation(Orient_Vertical).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
+                + SSplitter::Slot().Value(0.28f).MinSize(64)
+                [
+                    SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
+                    + SSplitter::Slot().Value(0.34f).MinSize(140)[ ScanPanel ]
+                    + SSplitter::Slot().Value(0.33f).MinSize(140)[ SearchPanel ]
+                    + SSplitter::Slot().Value(0.33f).MinSize(140)[ FilterPanel ]
+                ]
+                + SSplitter::Slot().Value(0.36f).MinSize(100)[ BlueprintPanel ]
+                + SSplitter::Slot().Value(0.19f).MinSize(80)
+                [
+                    SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
+                    + SSplitter::Slot().Value(0.3f).MinSize(140)[ InventoryPanel ]
+                    + SSplitter::Slot().Value(0.7f).MinSize(220)[ BatchPanel ]
+                ]
+                + SSplitter::Slot().Value(0.17f).MinSize(70)[ PreviewPanel ]
             ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 5, 0, 4)
             [ SNew(STextBlock).AutoWrapText(true).Text_Lambda([this]() { return Status; }) ]
             + SVerticalBox::Slot().AutoHeight()
             [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().AutoWidth()
-                [ SNew(SButton).Text(LOCTEXT("Compile", "Compile changed")).IsEnabled_Lambda([this]() { return CanWork() && !bScanning && !ChangedAssets.IsEmpty(); })
+                SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
+                + SWrapBox::Slot()
+                [ SNew(SButton).Text(LOCTEXT("Compile", "Compile changed")).IsEnabled_Lambda([this]() { return CanEditResults() && !ChangedAssets.IsEmpty(); })
                     .OnClicked(this, &SBlueprintTagManager::CompileChanged) ]
-                + SHorizontalBox::Slot().AutoWidth().Padding(5, 0)
-                [ SNew(SButton).Text(LOCTEXT("Save", "Save changed...")).IsEnabled_Lambda([this]() { return CanWork() && !bScanning && !ChangedAssets.IsEmpty(); })
+                + SWrapBox::Slot()
+                [ SNew(SButton).Text(LOCTEXT("Save", "Save changed...")).IsEnabled_Lambda([this]() { return CanEditResults() && !ChangedAssets.IsEmpty(); })
                     .OnClicked(this, &SBlueprintTagManager::SaveChanged) ]
-                + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+                + SWrapBox::Slot().VAlign(VAlign_Center)
                 [ SNew(STextBlock).Text_Lambda([this]() { return FText::Format(LOCTEXT("Touched", "{0} assets tracked for compile/save; Ctrl+Z undoes the tag batch."), ChangedAssets.Num()); }) ]
             ]
         ]
@@ -196,7 +267,7 @@ SBlueprintTagManager::~SBlueprintTagManager()
 }
 
 bool SBlueprintTagManager::CanWork() const { return GEditor && !GEditor->PlayWorld; }
-void SBlueprintTagManager::QueueRefresh() { bRefreshRequested = true; }
+void SBlueprintTagManager::QueueRefresh() { if (bHasScanned) { bRefreshRequested = true; } }
 void SBlueprintTagManager::PostUndo(bool) { QueueRefresh(); }
 void SBlueprintTagManager::PostRedo(bool) { QueueRefresh(); }
 
@@ -217,11 +288,22 @@ void SBlueprintTagManager::Tick(const FGeometry& Geometry, double CurrentTime, f
     else if (bRefreshRequested) { RefreshRows(); }
 }
 
+FReply SBlueprintTagManager::RequestScan()
+{
+    if (CanWork() && !IsScanInProgress())
+    {
+        bScanRequested = true;
+        InvalidatePreview();
+    }
+    return FReply::Handled();
+}
+
 void SBlueprintTagManager::BeginScan()
 {
     FText Error;
     TArray<FAssetData> Assets;
     if (!FBlueprintTagProject::Discover(FolderInput->GetText().ToString(), Assets, Error)) { Status = Error; return; }
+    bHasScanned = true;
     ScanChecks.Reset();
     for (const auto& Row : Rows) { ScanChecks.Add(Row->Key(), Row->bChecked); }
     Blueprints.Reset(); Rows.Reset();
@@ -345,10 +427,12 @@ void SBlueprintTagManager::InvalidatePreview()
     if (PreviewList) { PreviewList->RequestListRefresh(); }
     Status = CanWork() ? LOCTEXT("NeedPreview", "Check targets, then choose an operation to preview. Apply does not save assets.")
         : LOCTEXT("Playing", "Stop Play / Simulate to scan or edit Blueprint defaults.");
+    if (CanWork() && !bHasScanned) { Status = LOCTEXT("NeedScan", "Choose a content folder and click Scan project to begin."); }
 }
 
 FText SBlueprintTagManager::GetScanText() const
 {
+    if (!bHasScanned) { return LOCTEXT("NotScanned", "Not scanned. Click Scan project to load Blueprint tags."); }
     return FText::FromString(FString::Printf(TEXT("%s | %d / %d Blueprint assets read | %d Actor Blueprints | %d targets | %d non-Actor skipped | %d failed (hover for paths)"),
         bScanning ? TEXT("Scanning") : bCanceled ? TEXT("Canceled: partial results") : TEXT("Scan complete"),
         ScanIndex, ScanAssets.Num(), Blueprints.Num(), Rows.Num(), SkippedAssets, FailedAssets));
@@ -372,7 +456,7 @@ FReply SBlueprintTagManager::CheckMatches(bool bChecked)
 FReply SBlueprintTagManager::MakePreview(EBlueprintTagOperation Operation)
 {
     InvalidatePreview();
-    if (!CanWork() || bScanning) { return FReply::Handled(); }
+    if (!CanEditResults()) { return FReply::Handled(); }
     FName OldTag, NewTag;
     if ((Operation == EBlueprintTagOperation::Rename || Operation == EBlueprintTagOperation::Remove)
         && !FBlueprintTagService::ParseTag(OldTagInput->GetText().ToString(), OldTag, Status)) { return FReply::Handled(); }
@@ -403,7 +487,7 @@ FReply SBlueprintTagManager::MakePreview(EBlueprintTagOperation Operation)
 FReply SBlueprintTagManager::ApplyPreview()
 {
     FText Error;
-    const bool bSuccess = CanWork() && !bScanning && FBlueprintTagService::ApplyBatch(PendingChanges, Error);
+    const bool bSuccess = CanEditResults() && FBlueprintTagService::ApplyBatch(PendingChanges, Error);
     if (bSuccess) { for (const auto& Item : PendingChanges) { ChangedAssets.Add(FSoftObjectPath(Item.Blueprint.Get())); } }
     RefreshRows();
     Status = bSuccess ? LOCTEXT("Applied", "Applied across all previewed assets. Compile changed, then Save changed. Ctrl+Z undoes the entire tag batch.") : Error;
@@ -475,20 +559,13 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
         virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& Column) override
         {
             const bool bActor = !Item->bGroup && Item->Target.Kind == EBlueprintTagTargetKind::Actor;
-            const FSlateColor TextColor = bActor ? FSlateColor(FLinearColor(0.45f, 0.78f, 1.0f)) : FSlateColor::UseForeground();
             const FSlateFontInfo Font = FAppStyle::GetFontStyle(bActor ? "BoldFont" : "NormalFont");
-            auto DecorateActor = [bActor](TSharedRef<SWidget> CellWidget) -> TSharedRef<SWidget>
-            {
-                if (!bActor) { return CellWidget; }
-                return SNew(SBorder).BorderImage(FAppStyle::GetBrush("WhiteBrush"))
-                    .BorderBackgroundColor(FLinearColor(0.035f, 0.075f, 0.12f)).Padding(FMargin(6, 4))[ CellWidget ];
-            };
             if (Column == "Target")
             {
                 const FString Label = Item->bGroup ? FPackageName::ObjectPathToObjectName(Item->AssetPath)
                     : Item->Target.Kind == EBlueprintTagTargetKind::Actor ? TEXT("Actor Tags") : Item->Target.Label;
                 TSharedRef<SWidget> Name = SNew(STextBlock).Text(FText::FromString(Label))
-                    .Font(Font).ColorAndOpacity(TextColor)
+                    .Font(Font)
                     .ToolTipText(FText::FromString(Item->bGroup ? Item->AssetPath : Label)).OverflowPolicy(ETextOverflowPolicy::Ellipsis);
                 if (Item->bGroup)
                 {
@@ -500,7 +577,7 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
                         [ SNew(SButton).Text(LOCTEXT("OpenBlueprint", "Open Blueprint")).OnClicked(Open)
                             .ToolTipText(FText::FromString(Item->AssetPath)) ];
                 }
-                return DecorateActor(SNew(SHorizontalBox)
+                return SNew(SHorizontalBox)
                     + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ SNew(SExpanderArrow, SharedThis(this)) ]
                     + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 5, 0)
                     [ SNew(SCheckBox).IsEnabled(Item->CanCheck())
@@ -508,7 +585,7 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
                             : LOCTEXT("TargetCheck", "Select this target for batch editing."))
                         .IsChecked_Lambda([this]() { return Item->CheckState(); })
                         .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { Item->SetChecked(State == ECheckBoxState::Checked); Changed.ExecuteIfBound(); }) ]
-                    + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Name ]);
+                    + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Name ];
             }
             const FString Text = Item->bGroup
                 ? (Column == "Source" ? FString::Printf(TEXT("%d / %d components shown\n%s"), Item->MatchingComponents,
@@ -516,8 +593,8 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
                         : Item->bActorHasTags ? TEXT("Actor tags: Present") : TEXT("Actor tags: None")) : Item->Summary)
                 : (Column == "Source" ? (bActor ? FString(TEXT("Actor defaults")) : Item->Target.Source) + (Item->Target.bEditable ? TEXT("") : TEXT(" (read only)"))
                     : FBlueprintTagService::FormatTags(Item->Target.Tags));
-            return DecorateActor(SNew(STextBlock).Text(FText::FromString(Text)).Font(Font).ColorAndOpacity(TextColor)
-                .ToolTipText(FText::FromString(Text)).OverflowPolicy(ETextOverflowPolicy::Ellipsis));
+            return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font)
+                .ToolTipText(FText::FromString(Text)).OverflowPolicy(ETextOverflowPolicy::Ellipsis);
         }
     };
     return SNew(SOwnerRow, Owner, Item, FSimpleDelegate::CreateSP(this, &SBlueprintTagManager::InvalidatePreview),

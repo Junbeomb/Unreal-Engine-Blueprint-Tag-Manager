@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.0
+# Blueprint Tag Manager 1.0.1
 
 An Unreal Engine 5.7 editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. Blueprints do not need to be opened individually.
 
@@ -6,7 +6,7 @@ Windows x64 is supported. Testing used the Epic Games Launcher build of Unreal E
 
 ## Installation
 
-1. Close Unreal Editor and extract `BlueprintTagManager-1.0.0-UE5.7-Win64.zip`.
+1. Close Unreal Editor and extract `BlueprintTagManager-1.0.1-UE5.7-Win64.zip`.
 2. Copy the **BlueprintTagManager** folder into `<YourProject>/Plugins/`. When replacing an existing installation, replace the plugin folder with the release version.
 3. Confirm that the descriptor is at `<YourProject>/Plugins/BlueprintTagManager/BlueprintTagManager.uplugin`.
 4. Enable **Edit > Plugins > Blueprint Tag Manager** and restart the editor.
@@ -16,20 +16,26 @@ Use the separately published release ZIP for prebuilt binaries. GitHub's **Code 
 
 ## Scanning and browsing
 
-- The default scan scope is `/Game` and enabled project plugins that contain content. Leave the folder field blank for this scope, or enter a subfolder such as `/Game/Characters` and click **Scan project**.
+- Opening the panel leaves it in **Not scanned** state and does not load Blueprint assets. The default scope is `/Game` and enabled project plugins that contain content. Leave the folder blank for this scope, or enter a subfolder such as `/Game/Characters`. Click **Scan project** in the **Project scan** section to begin.
 - Saved assets are loaded into memory to read their defaults, without opening their Blueprint editors. Loaded Blueprints are retained while the panel uses them. Large projects can take time to scan.
 - Progress shows assets read, Actor Blueprints found, target count, skipped non-Actor assets, and failures. Hover over the progress text for failed asset paths.
 - **Cancel scan** keeps partial results and labels them **Canceled: partial results**. An individual asset load must finish before cancellation takes effect.
 - Each Blueprint starts collapsed. Its overview summarizes Actor Tags, the union of all component tags, and matching/total component counts. The summary always covers the entire Blueprint, including components hidden by filters.
 - Click the **Blueprint name or arrow** to expand or collapse it. The separate **Open Blueprint** button opens the asset. Hover over the name for its full path. **Expand all / Collapse all** changes the presentation only.
-- **Actor Tags** appear as a separate row with a blue background and bold blue text. This row edits actor defaults, independently of component tags.
+- **Actor Tags** appear as a separate row with bold text and the normal text color and background. This row edits actor defaults, independently of component tags.
 - The **Source** column identifies a component's owning Blueprint, inherited Blueprint, or native C++ class. Actor rows are labeled **Actor defaults**.
 
-## Filters
+## Layout and resizing
+
+Labeled sections separate **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview**. Drag the dividers between the main rows to change their heights. Drag dividers between side-by-side sections to adjust the scan/search/filter widths, the inventory/batch-edit widths, and the two tag input widths. Drag table header dividers to adjust column widths.
+
+Control sections can be scrolled after being reduced in size. Layout adjustments remain for the current panel session.
+
+## Search and filters
 
 **StaticMesh only** is on by default. It shows `StaticMeshComponent` and derived component types, including Instanced Static Mesh (ISM) and Hierarchical Instanced Static Mesh (HISM). The actual component class is used; its name and assigned mesh asset do not affect this classification. Actor Tags remain a separate target. Turn the toggle off to include other component types.
 
-The three search fields are independent:
+The three fields in the **Search** section are independent:
 
 | Field | Searches |
 | --- | --- |
@@ -39,7 +45,7 @@ The three search fields are independent:
 
 All nonempty fields must match. Within each field, all space-separated terms must match, case-insensitively.
 
-| Tag filter | Behavior |
+| Tag presence in Filters | Behavior |
 | --- | --- |
 | All | Does not exclude targets based on tag presence |
 | With tags | Includes only Blueprints with tags on their actor or a component, and displays only tagged targets |
