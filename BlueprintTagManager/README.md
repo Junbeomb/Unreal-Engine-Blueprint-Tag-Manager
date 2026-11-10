@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.1
+# Blueprint Tag Manager 1.0.2
 
 An Unreal Engine 5.7 editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. Blueprints do not need to be opened individually.
 
@@ -6,7 +6,7 @@ Windows x64 is supported. Testing used the Epic Games Launcher build of Unreal E
 
 ## Installation
 
-1. Close Unreal Editor and extract `BlueprintTagManager-1.0.1-UE5.7-Win64.zip`.
+1. Close Unreal Editor and extract `BlueprintTagManager-1.0.2-UE5.7-Win64.zip`.
 2. Copy the **BlueprintTagManager** folder into `<YourProject>/Plugins/`. When replacing an existing installation, replace the plugin folder with the release version.
 3. Confirm that the descriptor is at `<YourProject>/Plugins/BlueprintTagManager/BlueprintTagManager.uplugin`.
 4. Enable **Edit > Plugins > Blueprint Tag Manager** and restart the editor.
@@ -27,13 +27,22 @@ Use the separately published release ZIP for prebuilt binaries. GitHub's **Code 
 
 ## Layout and resizing
 
-Labeled sections separate **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview**. Drag the dividers between the main rows to change their heights. Drag dividers between side-by-side sections to adjust the scan/search/filter widths, the inventory/batch-edit widths, and the two tag input widths. Drag table header dividers to adjust column widths.
+Labeled sections separate **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview**. Drag the dividers between the main rows to change their heights. Drag dividers between side-by-side sections to adjust the scan/search/filter widths, the inventory/batch-edit widths, and the two batch-operation groups. Drag table header dividers to adjust column widths. The type-filter toggles and **Apply preview** keep their content-sized width instead of stretching across the section.
 
 Control sections can be scrolled after being reduced in size. Layout adjustments remain for the current panel session.
 
 ## Search and filters
 
 **StaticMesh only** is on by default. It shows `StaticMeshComponent` and derived component types, including Instanced Static Mesh (ISM) and Hierarchical Instanced Static Mesh (HISM). The actual component class is used; its name and assigned mesh asset do not affect this classification. Actor Tags remain a separate target. Turn the toggle off to include other component types.
+
+Two independent exclusion toggles appear below **StaticMesh only**. Both default to off and keep working when StaticMesh only is off:
+
+| Exclusion | Hides |
+| --- | --- |
+| Exclude HISM | Hierarchical Instanced Static Mesh components and their subclasses |
+| Exclude ISM | Instanced Static Mesh components and their non-hierarchical subclasses; HISM is controlled separately |
+
+Use either toggle independently, or enable both to hide both categories. Excluded components are left out of the results, inventory, and batch-edit scope. Whole-Blueprint summaries and total component counts still include them.
 
 The three fields in the **Search** section are independent:
 
@@ -61,13 +70,16 @@ Batch operations and the inventory include matching targets inside collapsed gro
 
 The inventory counts tag occurrences and distinct owning targets across matching results. Click a tag to fill **Existing tag**.
 
-| Operation | Behavior |
-| --- | --- |
-| Preview add | Adds **New tag** without creating a duplicate |
-| Preview rename | Renames **Existing tag** to **New tag**, merging collisions |
-| Preview remove | Removes every occurrence of **Existing tag** |
-| Preview clear | Clears all tags on selected targets |
-| Preview deduplicate | Removes duplicate tags on each target, preserving first-occurrence order |
+The batch editor separates operations into two groups with independent input fields:
+
+| Group | Operation | Inputs and behavior |
+| --- | --- | --- |
+| Checked targets | Preview add | Adds **Tag to add** without creating a duplicate; ignores Existing tag and Replacement tag |
+| Checked targets | Preview clear | Clears all tags on checked matching targets; ignores every tag input |
+| Match an existing tag | Preview rename | Renames **Existing tag** to **Replacement tag**, merging collisions; ignores Tag to add |
+| Match an existing tag | Preview remove | Removes every occurrence of **Existing tag**; ignores the other inputs |
+
+Every operation applies only to checked matching targets, including the Actor Tags row if checked. Preview deduplicate has been removed; add still avoids adding an existing tag, and rename still merges collisions with its replacement.
 
 Review the per-asset before/after list, then click **Apply preview**. The complete batch is validated before tag writes. If a target changed after preview, the entire batch is rejected; refresh and preview again. One **Ctrl+Z / Ctrl+Y** undoes or redoes the whole tag batch across Blueprints.
 

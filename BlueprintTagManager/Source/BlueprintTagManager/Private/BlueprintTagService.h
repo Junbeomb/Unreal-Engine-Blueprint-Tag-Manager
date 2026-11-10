@@ -6,7 +6,7 @@
 class UBlueprint;
 class USCS_Node;
 
-enum class EBlueprintTagOperation : uint8 { Add, Rename, Remove, Clear, Deduplicate };
+enum class EBlueprintTagOperation : uint8 { Add, Rename, Remove, Clear };
 enum class EBlueprintTagTargetKind : uint8 { Actor, Component, InheritedComponent, NativeComponent };
 
 struct FBlueprintTagTarget
@@ -20,6 +20,8 @@ struct FBlueprintTagTarget
     TArray<FName> Tags;
     bool bEditable = false;
     bool bStaticMeshComponent = false;
+    bool bInstancedStaticMeshComponent = false;
+    bool bHierarchicalInstancedStaticMeshComponent = false;
 };
 
 struct FBlueprintTagChange

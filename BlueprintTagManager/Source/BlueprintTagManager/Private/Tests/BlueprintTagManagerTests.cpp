@@ -74,7 +74,9 @@ bool FBlueprintTagOperationsTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Missing rename is a no-op"), FBlueprintTagService::Transform(Original, Op::Rename, TEXT("Missing"), TEXT("Keep")) == Original);
     TestEqual(TEXT("Remove every occurrence"), FBlueprintTagService::Transform(Original, Op::Remove, TEXT("Enemy")).Num(), 3);
     TestEqual(TEXT("Clear all"), FBlueprintTagService::Transform(Original, Op::Clear).Num(), 0);
-    TestEqual(TEXT("Deduplicate"), FBlueprintTagService::Transform(Original, Op::Deduplicate).Num(), 3);
+    TestTrue(TEXT("Add ignores Existing tag"), FBlueprintTagService::Transform(Original, Op::Add, TEXT("Missing"), TEXT("New"))
+        == FBlueprintTagService::Transform(Original, Op::Add, NAME_None, TEXT("New")));
+    TestEqual(TEXT("Clear ignores both tag inputs"), FBlueprintTagService::Transform(Original, Op::Clear, TEXT("Missing"), TEXT("New")).Num(), 0);
     FName Parsed;
     FText Error;
     TestFalse(TEXT("Empty rejected"), FBlueprintTagService::ParseTag(TEXT("  "), Parsed, Error));
@@ -431,6 +433,14 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
     auto Build = [&]() { FBlueprintTagView::Build(Rows, Filter, Roots, Matches); };
     Build();
     TestTrue(TEXT("StaticMesh only is on by default"), Filter.bStaticMeshOnly);
+    TestFalse(TEXT("HISM exclusion is off by default"), Filter.bExcludeHISM);
+    TestFalse(TEXT("ISM exclusion is off by default"), Filter.bExcludeISM);
+    TestTrue(TEXT("ISM classified independently of HISM"), Rows.ContainsByPredicate([](const auto& Row)
+        { return Row->Target.Label == TEXT("Instanced") && Row->Target.bInstancedStaticMeshComponent
+            && !Row->Target.bHierarchicalInstancedStaticMeshComponent; }));
+    TestTrue(TEXT("HISM does not inherit the ISM exclusion"), Rows.ContainsByPredicate([](const auto& Row)
+        { return Row->Target.Label == TEXT("Hierarchical") && Row->Target.bHierarchicalInstancedStaticMeshComponent
+            && !Row->Target.bInstancedStaticMeshComponent; }));
     TestEqual(TEXT("Actor plus StaticMesh, ISM, HISM match by real class"), Matches.Num(), 4);
     TestTrue(TEXT("Every displayed component derives from StaticMeshComponent"), !Matches.ContainsByPredicate([](const auto& Row)
         { return Row->Target.Kind != EBlueprintTagTargetKind::Actor && !Row->Target.bStaticMeshComponent; }));
@@ -453,13 +463,80 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Class filter does not use component name"), Matches.Num(), 0);
     Filter = {}; Filter.bStaticMeshOnly = false; Build();
     TestEqual(TEXT("Turning off type filter restores all components and actor"), Matches.Num(), 6);
+    for (const bool bMeshOnly : { false, true })
+    {
+        for (const bool bExcludeHISM : { false, true })
+        {
+            for (const bool bExcludeISM : { false, true })
+            {
+                for (const auto Presence : { EBlueprintTagPresence::All, EBlueprintTagPresence::Tagged, EBlueprintTagPresence::Untagged })
+                {
+                    Filter = {};
+                    Filter.bStaticMeshOnly = bMeshOnly;
+                    Filter.bExcludeHISM = bExcludeHISM;
+                    Filter.bExcludeISM = bExcludeISM;
+                    Filter.ComponentPresence = Presence;
+                    for (const auto& Row : Rows) { Row->bChecked = false; }
+                    Build();
+                    TArray<FString> Expected;
+                    // Fixed fixture expectations cover all 24 independent filter combinations.
+                    if (Presence != EBlueprintTagPresence::Tagged) { Expected.Add(TEXT("MeshWithoutAsset")); }
+                    if (Presence != EBlueprintTagPresence::Untagged)
+                    {
+                        if (!bExcludeHISM) { Expected.Add(TEXT("Hierarchical")); }
+                        if (!bExcludeISM) { Expected.Add(TEXT("Instanced")); }
+                        if (!bMeshOnly) { Expected.Add(TEXT("StaticMeshPretender")); Expected.Add(TEXT("Skeletal")); }
+                    }
+                    const FString Context = FString::Printf(TEXT("MeshOnly=%d, ExcludeHISM=%d, ExcludeISM=%d, Presence=%d"),
+                        bMeshOnly, bExcludeHISM, bExcludeISM, static_cast<int32>(Presence));
+                    TestEqual(Context + TEXT(": actor plus expected components"), Matches.Num(), Expected.Num() + 1);
+                    for (const auto& Row : Matches)
+                    {
+                        TestTrue(Context + TEXT(": correct target ") + Row->Target.Label,
+                            Row->Target.Kind == EBlueprintTagTargetKind::Actor || Expected.Contains(Row->Target.Label));
+                    }
+                    if (TestEqual(Context + TEXT(": Blueprint retained"), Roots.Num(), 1))
+                    {
+                        TestEqual(Context + TEXT(": overview includes every component"), Roots[0]->TotalComponents, 5);
+                        TestTrue(Context + TEXT(": summary includes excluded tags"), Roots[0]->Summary.Contains(TEXT("ISMTag"))
+                            && Roots[0]->Summary.Contains(TEXT("HISMTag")));
+                        Roots[0]->SetChecked(true);
+                        TSet<FString> Selected;
+                        for (const auto& Row : Rows) { if (Row->bChecked) { Selected.Add(Row->Target.Id); } }
+                        TestEqual(Context + TEXT(": excluded targets cannot be selected by group"), Selected.Num(), Expected.Num() + 1);
+                        TestEqual(Context + TEXT(": batch preview respects exclusions"),
+                            FBlueprintTagService::Preview(Blueprint, Selected, EBlueprintTagOperation::Add, NAME_None, TEXT("FilterBatch")).Num(),
+                            Expected.Num() + 1);
+                    }
+                }
+            }
+        }
+    }
+    Filter = {}; Filter.bExcludeHISM = true; Filter.Component = TEXT("Hierarchical"); Build();
+    TestEqual(TEXT("Component search does not bypass HISM exclusion"), Matches.Num(), 0);
+    Filter = {}; Filter.bStaticMeshOnly = false; Filter.bExcludeISM = true; Filter.Tags = TEXT("ISMTag"); Build();
+    TestEqual(TEXT("Tag search keeps HISM independently of ISM exclusion"), Matches.Num(), 1);
+    TestTrue(TEXT("HISM survives ISM exclusion even though its tag also matches ISMTag"), Matches.Num() == 1
+        && Matches[0]->Target.Label == TEXT("Hierarchical"));
     UBlueprint* Child = MakeBlueprint(Blueprint->GeneratedClass);
     int32 InheritedMeshes = 0;
+    int32 InheritedISM = 0, InheritedHISM = 0;
+    Rows.Reset();
     for (const auto& Target : FBlueprintTagService::Gather(Child))
     {
         if (Target.Kind == EBlueprintTagTargetKind::InheritedComponent && Target.bStaticMeshComponent) { ++InheritedMeshes; }
+        if (Target.Kind == EBlueprintTagTargetKind::InheritedComponent && Target.bInstancedStaticMeshComponent) { ++InheritedISM; }
+        if (Target.Kind == EBlueprintTagTargetKind::InheritedComponent && Target.bHierarchicalInstancedStaticMeshComponent) { ++InheritedHISM; }
+        auto Row = MakeShared<FBlueprintTagOwnerRow>();
+        Row->Blueprint = Child; Row->AssetPath = Child->GetPathName(); Row->Target = Target; Rows.Add(Row);
     }
     TestEqual(TEXT("Inherited mesh component classes detected"), InheritedMeshes, 3);
+    TestEqual(TEXT("Inherited ISM classified separately"), InheritedISM, 1);
+    TestEqual(TEXT("Inherited HISM classified separately"), InheritedHISM, 1);
+    Filter = {}; Filter.bExcludeHISM = true; Filter.bExcludeISM = true; Build();
+    TestEqual(TEXT("Both exclusions apply to inherited components with StaticMesh only on"), Matches.Num(), 2);
+    Filter.bStaticMeshOnly = false; Build();
+    TestEqual(TEXT("Both exclusions apply to inherited components with StaticMesh only off"), Matches.Num(), 4);
     UBlueprint* Native = MakeBlueprint(AStaticMeshActor::StaticClass());
     TestTrue(TEXT("Native C++ StaticMesh component detected"), FBlueprintTagService::Gather(Native).ContainsByPredicate([](const auto& Target)
         { return Target.Kind == EBlueprintTagTargetKind::NativeComponent && Target.bStaticMeshComponent; }));

@@ -20,6 +20,8 @@ bool FBlueprintTagFilter::Matches(const FString& AssetPath, const FBlueprintTagT
     // A component-name query never matches the actor's Blueprint-derived label.
     if (bActor && !Component.TrimStartAndEnd().IsEmpty()) { return false; }
     if (!bActor && bStaticMeshOnly && !Target.bStaticMeshComponent) { return false; }
+    if (!bActor && bExcludeHISM && Target.bHierarchicalInstancedStaticMeshComponent) { return false; }
+    if (!bActor && bExcludeISM && Target.bInstancedStaticMeshComponent) { return false; }
     if (ComponentPresence == EBlueprintTagPresence::Tagged && Target.Tags.IsEmpty()) { return false; }
     if (!bActor && ComponentPresence == EBlueprintTagPresence::Untagged && !Target.Tags.IsEmpty()) { return false; }
     return MatchesTerms(AssetPath, Blueprint) && MatchesTerms(bActor ? FString() : Target.Label, Component)

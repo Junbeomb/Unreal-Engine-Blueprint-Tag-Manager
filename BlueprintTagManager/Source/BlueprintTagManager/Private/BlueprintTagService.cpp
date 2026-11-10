@@ -1,6 +1,8 @@
 #include "BlueprintTagService.h"
 
 #include "Components/ActorComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
@@ -61,6 +63,9 @@ TArray<FBlueprintTagTarget> FBlueprintTagService::Gather(UBlueprint* Blueprint)
             Target.Node = Node;
             Target.Tags = Template->ComponentTags;
             Target.bStaticMeshComponent = Template->IsA<UStaticMeshComponent>();
+            Target.bHierarchicalInstancedStaticMeshComponent = Template->IsA<UHierarchicalInstancedStaticMeshComponent>();
+            Target.bInstancedStaticMeshComponent = Template->IsA<UInstancedStaticMeshComponent>()
+                && !Target.bHierarchicalInstancedStaticMeshComponent;
             Target.bEditable = !bInherited || (bEnableInherited && Template->IsEditableWhenInherited()
                 && FComponentKey(Node).IsValid());
         }
@@ -78,6 +83,9 @@ TArray<FBlueprintTagTarget> FBlueprintTagService::Gather(UBlueprint* Blueprint)
         Target.Object = Component;
         Target.Tags = Component->ComponentTags;
         Target.bStaticMeshComponent = Component->IsA<UStaticMeshComponent>();
+        Target.bHierarchicalInstancedStaticMeshComponent = Component->IsA<UHierarchicalInstancedStaticMeshComponent>();
+        Target.bInstancedStaticMeshComponent = Component->IsA<UInstancedStaticMeshComponent>()
+            && !Target.bHierarchicalInstancedStaticMeshComponent;
         Target.bEditable = Component->IsIn(CDO) && Component->IsEditableWhenInherited();
     }
     return Result;
@@ -129,10 +137,6 @@ TArray<FName> FBlueprintTagService::Transform(const TArray<FName>& Tags, EBluepr
         break;
     case EBlueprintTagOperation::Clear:
         Result.Reset();
-        break;
-    case EBlueprintTagOperation::Deduplicate:
-        Result.Reset();
-        for (const FName Tag : Tags) { Result.AddUnique(Tag); }
         break;
     }
     return Result;

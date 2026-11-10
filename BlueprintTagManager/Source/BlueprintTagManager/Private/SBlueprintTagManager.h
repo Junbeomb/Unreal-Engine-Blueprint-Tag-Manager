@@ -77,6 +77,7 @@ private:
     TSharedPtr<SListView<TSharedPtr<FBlueprintTagInventoryRow>>> InventoryList;
     TSharedPtr<SListView<TSharedPtr<FString>>> PreviewList;
     TSharedPtr<SEditableTextBox> FolderInput;
+    TSharedPtr<SEditableTextBox> AddTagInput;
     TSharedPtr<SEditableTextBox> OldTagInput;
     TSharedPtr<SEditableTextBox> NewTagInput;
     FBlueprintTagFilter SearchFilter;
