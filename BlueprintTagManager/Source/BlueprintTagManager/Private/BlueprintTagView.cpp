@@ -58,7 +58,7 @@ void FBlueprintTagView::Build(const TArray<TSharedPtr<FBlueprintTagOwnerRow>>& R
 {
     Roots.Reset(); Matches.Reset();
     TMap<FString, TSharedPtr<FBlueprintTagOwnerRow>> Groups;
-    TMap<FString, TSet<FName>> ComponentTags;
+    TMap<FString, TSet<FName>> ShownComponentTags;
     TMap<FString, FString> ActorTags;
     for (const auto& Row : Rows)
     {
@@ -81,12 +81,15 @@ void FBlueprintTagView::Build(const TArray<TSharedPtr<FBlueprintTagOwnerRow>>& R
         {
             ++Group->TotalComponents;
             if (!Row->Target.Tags.IsEmpty()) { ++Group->TaggedComponents; }
-            for (FName TagName : Row->Target.Tags) { ComponentTags.FindOrAdd(Row->AssetPath).Add(TagName); }
         }
         if (Filter.Matches(Row->AssetPath, Row->Target))
         {
             Matches.Add(Row); Group->Children.Add(Row);
-            if (!bActor) { ++Group->MatchingComponents; }
+            if (!bActor)
+            {
+                ++Group->MatchingComponents;
+                for (FName TagName : Row->Target.Tags) { ShownComponentTags.FindOrAdd(Row->AssetPath).Add(TagName); }
+            }
         }
     }
     Roots.RemoveAll([&Filter](const auto& Group)
@@ -97,9 +100,9 @@ void FBlueprintTagView::Build(const TArray<TSharedPtr<FBlueprintTagOwnerRow>>& R
     for (const auto& Group : Roots)
     {
         TArray<FName> Names;
-        if (const auto* Unique = ComponentTags.Find(Group->AssetPath)) { Names = Unique->Array(); }
+        if (const auto* Unique = ShownComponentTags.Find(Group->AssetPath)) { Names = Unique->Array(); }
         Names.Sort(FNameLexicalLess());
         Group->Summary = TEXT("Actor: ") + ActorTags.FindRef(Group->AssetPath)
-            + TEXT("\nComponents (all): ") + FBlueprintTagService::FormatTags(Names);
+            + TEXT("\nComponents (shown): ") + FBlueprintTagService::FormatTags(Names);
     }
 }

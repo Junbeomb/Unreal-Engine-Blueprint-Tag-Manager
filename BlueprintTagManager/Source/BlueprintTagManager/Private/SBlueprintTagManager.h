@@ -81,6 +81,7 @@ private:
     TSharedPtr<SEditableTextBox> OldTagInput;
     TSharedPtr<SEditableTextBox> NewTagInput;
     FBlueprintTagFilter SearchFilter;
+    FCheckBoxStyle ExcludeToggleStyle;
     FText Status;
     FString ScanFailures;
     int32 ScanIndex = 0;

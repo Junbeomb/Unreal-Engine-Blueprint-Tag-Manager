@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.2 - Validation Record
+# Blueprint Tag Manager 1.0.3 - Validation Record
 
 - Validation date: 2026-11-10 (Korea Standard Time).
 - Environment: Windows 11, Epic Games Launcher Unreal Engine 5.7.4, MSVC 14.44, Windows SDK 10.0.22621.0.
@@ -12,11 +12,11 @@
 | TagOperations | Add without duplicating an existing tag, rename and collision merging, removal of every matching occurrence, clear, input validation, add ignoring Existing tag, and clear ignoring both tag inputs | Passed |
 | BlueprintInheritance | Child overrides, parent protection, Undo/Redo, and persistence after compilation | Passed |
 | NativeComponents | Native C++ component editing, protection of original C++ defaults, and persistence after compilation | Passed |
-| EditorIntegration | No scan or targets on panel open and idle ticks, explicit Scan project action, asset discovery, default StaticMesh filter, expand/collapse without opening Blueprint editors, collapsed-group batch scope, separate search fields, and tag-presence filters | Passed |
+| EditorIntegration | No scan or targets on panel open and idle ticks, explicit Scan project action, asset discovery, default StaticMesh filter, omission of hidden non-mesh tags from the overview, expand/collapse without opening Blueprint editors, collapsed-group batch scope, separate search fields, and tag-presence filters | Passed |
 | ProjectBatch | Simultaneous parent/child/unrelated asset changes, complete preflight validation, rejection of a stale batch without partial tag writes, one-step Undo/Redo, and persistence after compilation | Passed |
 | ProjectDiscovery | Save and unload assets, discover within folder boundaries, read tags from disk assets, and distinguish non-Actor Blueprints | Passed |
-| ViewFiltering | Separate search fields and AND matching, group selection scope, tagless Blueprint exclusion under With tags, actor-only/component-only tag cases, all-Blueprint/actor retention under Without tags, untagged component filtering, all-tagged status, actors without components, and restoration under All | Passed |
-| StaticMeshFilter | Actual-class detection for StaticMesh/ISM/HISM, independent ISM and HISM classification, default exclusion states, all 24 combinations of StaticMesh-only state / HISM exclusion / ISM exclusion / tag presence, excluded-target omission from group selection and batch previews, unchanged whole-Blueprint summaries, combined component/tag searches, inherited exclusions with StaticMesh only on or off, and native StaticMesh detection | Passed |
+| ViewFiltering | Separate search fields and AND matching, group selection scope, tagless Blueprint exclusion under With tags, actor-only/component-only tag cases, actor retention under Without tags, all-tagged status, actors without components, and component summaries that follow component-name / tag / presence filters without leaking excluded tags or duplicating names | Passed |
+| StaticMeshFilter | Actual-class detection for StaticMesh/ISM/HISM, independent exclusions, all 24 combinations of StaticMesh-only state / HISM exclusion / ISM exclusion / tag presence, exact shown-component summaries for each combination, unchanged total counts, excluded-target omission from group selection and batch previews, combined searches, inherited exclusions and summaries, and native StaticMesh detection | Passed |
 
 Full test names use the prefix `BlueprintTagManager.` followed by the test name above. The source-build suite runs with NullRHI and RenderOffscreen. Other engine patches, custom engine builds, operating systems, and user projects require separate verification.
 
@@ -24,7 +24,7 @@ Full test names use the prefix `BlueprintTagManager.` followed by the test name 
 
 The same eight tests passed in a fresh project using Direct3D 11 / RenderOffscreen with `-BTMCaptureUI`: **8 passed, 0 passed with warnings, 0 failed, 0 not run**.
 
-Captures of the idle panel and expanded Blueprint results were reviewed for the initial Not scanned state, the independent HISM / ISM toggles below StaticMesh only, the separate Checked targets and Match an existing tag groups, independent add and replacement inputs, the absence of Preview deduplicate, and content-sized StaticMesh only / Apply preview controls. Actor Tags retain bold-only emphasis. The layout continues to use Slate splitters and resizable table columns. Screenshot artifacts remain outside the release archive.
+Captures of the idle panel, enabled exclusion toggles, and expanded Blueprint results were reviewed. Enabled HISM / ISM exclusions use red backgrounds while StaticMesh only retains its normal selection color. The overview uses **Components (shown)**. Tag to add sits next to Preview add inside its own block, and Replacement tag sits next to Preview rename inside its own block. Clear and Remove have separate blocks; Existing tag remains shared by Rename and Remove. The default row sizes leave room for the operation blocks. Actor Tags retain bold-only emphasis, and the layout continues to use Slate splitters and resizable table columns. Screenshot artifacts remain outside the release archive.
 
 ## Release checks
 
@@ -34,6 +34,6 @@ Pattern checks detect common private paths and known token formats; they are not
 
 ## Clean installation check
 
-The archive includes English `README.md` and `VALIDATION.md` files and declares release version **1.0.2** with internal version **3**.
+The archive includes English `README.md` and `VALIDATION.md` files and declares release version **1.0.3** with internal version **4**.
 
 The release ZIP was installed into a new, empty project. The plugin loaded without recompilation, and all eight automation tests passed in the rendered run described above. The final release DLL matches the DLL used for this installation check. The extracted download passed the source-only public release check, and the repository/archive release scan checked 46 files without finding matching private-path or known-token patterns.

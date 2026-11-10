@@ -238,12 +238,17 @@ bool FBlueprintTagEditorTest::RunTest(const FString& Parameters)
             const auto Group = Widget->GetGroups()[0];
             TestEqual(TEXT("Default view has separate actor plus StaticMesh component, not box"), Group->Children.Num(), 2);
             TestEqual(TEXT("Default type filter shows one of two components"), Group->MatchingComponents, 1);
+            TestTrue(TEXT("Overview omits tags on hidden non-mesh components"), Group->Summary.EndsWith(TEXT("Components (shown): []")));
             Widget->ToggleGroup(Group);
             TestTrue(TEXT("Blueprint name action expands group"), Widget->IsGroupExpanded(Group));
             Widget->ToggleGroup(Group);
             TestFalse(TEXT("Blueprint name action collapses group"), Widget->IsGroupExpanded(Group));
             TestEqual(TEXT("Name action does not open a Blueprint editor"), Kismet.GetBlueprintEditors().Num(), EditorsBefore);
+            Filter.bExcludeHISM = true; Filter.bExcludeISM = true;
+            Widget->SetFilter(Filter);
+            CaptureUI(TEXT("BlueprintTagManager-Exclusions.png"));
         }
+        Filter.bExcludeHISM = false; Filter.bExcludeISM = false;
         Filter.bStaticMeshOnly = false;
         Widget->SetFilter(Filter);
         TestEqual(TEXT("One Blueprint group instead of flat targets"), Widget->GetGroups().Num(), 1);
@@ -296,7 +301,7 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
         Row->Target.bEditable = true; Rows.Add(Row);
     };
     Add(TEXT("/Game/Hero.Hero"), TEXT("HeroActor"), TEXT("Actor Tags"), EBlueprintTagTargetKind::Actor, { TEXT("ActorOnly") });
-    Add(TEXT("/Game/Hero.Hero"), TEXT("Sensor"), TEXT("SCS"), EBlueprintTagTargetKind::Component, { TEXT("Enemy"), TEXT("Enemy") });
+    Add(TEXT("/Game/Hero.Hero"), TEXT("Sensor"), TEXT("SCS"), EBlueprintTagTargetKind::Component, { TEXT("Enemy"), TEXT("Enemy"), TEXT("SensorOnly") });
     Add(TEXT("/Game/Hero.Hero"), TEXT("Enemy"), TEXT("Native"), EBlueprintTagTargetKind::NativeComponent, {});
     Add(TEXT("/Game/Enemy.Enemy"), TEXT("Other"), TEXT("EnemyOrigin"), EBlueprintTagTargetKind::Component, { TEXT("Hero") });
     FBlueprintTagFilter Filter;
@@ -317,6 +322,8 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     Filter.Tags = TEXT("Enemy"); Build();
     TestEqual(TEXT("Tag search excludes matching component names, paths and sources"), Matches.Num(), 1);
     TestTrue(TEXT("Tag search finds actual tag"), Matches.Num() == 1 && Matches[0] == Rows[1]);
+    TestTrue(TEXT("Tag search summarizes all tags of the matching component, without duplicates"),
+        Roots[0]->Summary.EndsWith(TEXT("Components (shown): [Enemy, SensorOnly]")));
     Roots[0]->SetChecked(false);
     TestFalse(TEXT("Filtered group selection changes matching target"), Rows[1]->bChecked);
     TestTrue(TEXT("Filtered group selection preserves excluded target"), Rows[0]->bChecked);
@@ -324,6 +331,8 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Blueprint search ignores tags and component names"), Matches.Num() == 1 && Matches[0] == Rows[3]);
     Filter = {}; Filter.Component = TEXT("Enemy"); Build();
     TestTrue(TEXT("Component search ignores Blueprint, source and tag values"), Matches.Num() == 1 && Matches[0] == Rows[2]);
+    TestTrue(TEXT("Component search excludes hidden component tags from the summary"),
+        Roots[0]->Summary.EndsWith(TEXT("Components (shown): []")));
     Filter = {}; Filter.Blueprint = TEXT("game hero"); Filter.Tags = TEXT("ENE"); Build();
     TestTrue(TEXT("Fields combine with case-insensitive AND terms"), Matches.Num() == 1 && Matches[0] == Rows[1]);
     Filter.Component = TEXT("Enemy"); Build();
@@ -334,6 +343,8 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Untagged components plus actor"), Matches.Num() == 2 && Matches.Contains(Rows[0]) && Matches.Contains(Rows[2]));
     TestEqual(TEXT("Summary keeps total component count"), Roots[0]->TotalComponents, 2);
     TestEqual(TEXT("Summary reports matching component count"), Roots[0]->MatchingComponents, 1);
+    TestTrue(TEXT("Without tags does not leak tagged component summaries"),
+        Roots[0]->Summary.EndsWith(TEXT("Components (shown): []")));
     Filter.Tags = TEXT("none"); Build();
     TestEqual(TEXT("Empty-tag display text is not a tag"), Matches.Num(), 0);
 
@@ -448,7 +459,9 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
     {
         TestEqual(TEXT("Whole-Blueprint component count is preserved"), Roots[0]->TotalComponents, 5);
         TestEqual(TEXT("Three StaticMesh component types shown"), Roots[0]->MatchingComponents, 3);
-        TestTrue(TEXT("Whole-Blueprint summary still includes hidden component tags"), Roots[0]->Summary.Contains(TEXT("HiddenBoxTag")));
+        TestFalse(TEXT("Summary excludes tags of hidden non-mesh components"), Roots[0]->Summary.Contains(TEXT("HiddenBoxTag")));
+        TestTrue(TEXT("Summary includes matching component tags"),
+            Roots[0]->Summary.EndsWith(TEXT("Components (shown): [HISMTag, ISMTag]")));
         Roots[0]->SetChecked(true);
         TestFalse(TEXT("Hidden components excluded from group batch selection"), Rows.ContainsByPredicate([](const auto& Row)
             { return Row->Target.Kind != EBlueprintTagTargetKind::Actor && !Row->Target.bStaticMeshComponent && Row->bChecked; }));
@@ -498,8 +511,14 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
                     if (TestEqual(Context + TEXT(": Blueprint retained"), Roots.Num(), 1))
                     {
                         TestEqual(Context + TEXT(": overview includes every component"), Roots[0]->TotalComponents, 5);
-                        TestTrue(Context + TEXT(": summary includes excluded tags"), Roots[0]->Summary.Contains(TEXT("ISMTag"))
-                            && Roots[0]->Summary.Contains(TEXT("HISMTag")));
+                        TArray<FName> ExpectedTags;
+                        if (Expected.Contains(TEXT("Hierarchical"))) { ExpectedTags.Add(TEXT("HISMTag")); }
+                        if (Expected.Contains(TEXT("Instanced"))) { ExpectedTags.Add(TEXT("ISMTag")); }
+                        if (Expected.Contains(TEXT("StaticMeshPretender"))) { ExpectedTags.Add(TEXT("HiddenBoxTag")); }
+                        if (Expected.Contains(TEXT("Skeletal"))) { ExpectedTags.Add(TEXT("SkeletalTag")); }
+                        ExpectedTags.Sort(FNameLexicalLess());
+                        TestEqual(Context + TEXT(": summary contains only shown component tags"), Roots[0]->Summary,
+                            FString(TEXT("Actor: [ActorTag]\nComponents (shown): ")) + FBlueprintTagService::FormatTags(ExpectedTags));
                         Roots[0]->SetChecked(true);
                         TSet<FString> Selected;
                         for (const auto& Row : Rows) { if (Row->bChecked) { Selected.Add(Row->Target.Id); } }
@@ -518,6 +537,8 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Tag search keeps HISM independently of ISM exclusion"), Matches.Num(), 1);
     TestTrue(TEXT("HISM survives ISM exclusion even though its tag also matches ISMTag"), Matches.Num() == 1
         && Matches[0]->Target.Label == TEXT("Hierarchical"));
+    TestTrue(TEXT("Tag search summary contains only the surviving HISM tag"), Roots.Num() == 1
+        && Roots[0]->Summary.EndsWith(TEXT("Components (shown): [HISMTag]")));
     UBlueprint* Child = MakeBlueprint(Blueprint->GeneratedClass);
     int32 InheritedMeshes = 0;
     int32 InheritedISM = 0, InheritedHISM = 0;
@@ -535,6 +556,8 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Inherited HISM classified separately"), InheritedHISM, 1);
     Filter = {}; Filter.bExcludeHISM = true; Filter.bExcludeISM = true; Build();
     TestEqual(TEXT("Both exclusions apply to inherited components with StaticMesh only on"), Matches.Num(), 2);
+    TestTrue(TEXT("Inherited excluded tags are absent from the summary"), Roots.Num() == 1
+        && Roots[0]->Summary.EndsWith(TEXT("Components (shown): []")));
     Filter.bStaticMeshOnly = false; Build();
     TestEqual(TEXT("Both exclusions apply to inherited components with StaticMesh only off"), Matches.Num(), 4);
     UBlueprint* Native = MakeBlueprint(AStaticMeshActor::StaticClass());

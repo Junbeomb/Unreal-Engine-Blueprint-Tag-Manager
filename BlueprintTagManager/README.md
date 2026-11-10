@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.2
+# Blueprint Tag Manager 1.0.3
 
 An Unreal Engine 5.7 editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. Blueprints do not need to be opened individually.
 
@@ -6,7 +6,7 @@ Windows x64 is supported. Testing used the Epic Games Launcher build of Unreal E
 
 ## Installation
 
-1. Close Unreal Editor and extract `BlueprintTagManager-1.0.2-UE5.7-Win64.zip`.
+1. Close Unreal Editor and extract `BlueprintTagManager-1.0.3-UE5.7-Win64.zip`.
 2. Copy the **BlueprintTagManager** folder into `<YourProject>/Plugins/`. When replacing an existing installation, replace the plugin folder with the release version.
 3. Confirm that the descriptor is at `<YourProject>/Plugins/BlueprintTagManager/BlueprintTagManager.uplugin`.
 4. Enable **Edit > Plugins > Blueprint Tag Manager** and restart the editor.
@@ -20,7 +20,7 @@ Use the separately published release ZIP for prebuilt binaries. GitHub's **Code 
 - Saved assets are loaded into memory to read their defaults, without opening their Blueprint editors. Loaded Blueprints are retained while the panel uses them. Large projects can take time to scan.
 - Progress shows assets read, Actor Blueprints found, target count, skipped non-Actor assets, and failures. Hover over the progress text for failed asset paths.
 - **Cancel scan** keeps partial results and labels them **Canceled: partial results**. An individual asset load must finish before cancellation takes effect.
-- Each Blueprint starts collapsed. Its overview summarizes Actor Tags, the union of all component tags, and matching/total component counts. The summary always covers the entire Blueprint, including components hidden by filters.
+- Each Blueprint starts collapsed. Its overview summarizes Actor Tags, the union of tags on matching components, and matching/total component counts. **Components (shown)** follows the current type, exclusion, search, and tag-presence filters, including matching children inside collapsed groups. Tags belonging only to excluded components are omitted. Total component counts and **All targets have tags** still describe the whole Blueprint.
 - Click the **Blueprint name or arrow** to expand or collapse it. The separate **Open Blueprint** button opens the asset. Hover over the name for its full path. **Expand all / Collapse all** changes the presentation only.
 - **Actor Tags** appear as a separate row with bold text and the normal text color and background. This row edits actor defaults, independently of component tags.
 - The **Source** column identifies a component's owning Blueprint, inherited Blueprint, or native C++ class. Actor rows are labeled **Actor defaults**.
@@ -42,7 +42,7 @@ Two independent exclusion toggles appear below **StaticMesh only**. Both default
 | Exclude HISM | Hierarchical Instanced Static Mesh components and their subclasses |
 | Exclude ISM | Instanced Static Mesh components and their non-hierarchical subclasses; HISM is controlled separately |
 
-Use either toggle independently, or enable both to hide both categories. Excluded components are left out of the results, inventory, and batch-edit scope. Whole-Blueprint summaries and total component counts still include them.
+Use either toggle independently, or enable both to hide both categories. Enabled exclusion toggles are **red**, while StaticMesh only keeps its normal selection color. Excluded components are left out of the results, component-tag summary, inventory, and batch-edit scope. Total component counts still include them. The summary label is **Components (shown)**; it changes immediately with filters and stays the same when groups are expanded or collapsed.
 
 The three fields in the **Search** section are independent:
 
@@ -70,7 +70,7 @@ Batch operations and the inventory include matching targets inside collapsed gro
 
 The inventory counts tag occurrences and distinct owning targets across matching results. Click a tag to fill **Existing tag**.
 
-The batch editor separates operations into two groups with independent input fields:
+The batch editor separates operations into two groups with independent input fields. Each action has its own block: **Tag to add** and **Preview add** sit together in **Add a tag**, while **Preview clear** has a separate block without an input. Under **Match an existing tag**, the shared **Existing tag** field appears above the operations. **Replacement tag** and **Preview rename** sit together in **Rename a tag**; **Preview remove** is separate below and uses only Existing tag.
 
 | Group | Operation | Inputs and behavior |
 | --- | --- | --- |

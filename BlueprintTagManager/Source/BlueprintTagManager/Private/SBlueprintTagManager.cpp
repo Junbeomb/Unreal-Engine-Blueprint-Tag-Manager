@@ -28,6 +28,10 @@
 
 void SBlueprintTagManager::Construct(const FArguments& InArgs)
 {
+    ExcludeToggleStyle = FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox");
+    ExcludeToggleStyle.CheckedImage.TintColor = FLinearColor(0.55f, 0.055f, 0.045f);
+    ExcludeToggleStyle.CheckedHoveredImage.TintColor = FLinearColor(0.7f, 0.085f, 0.065f);
+    ExcludeToggleStyle.CheckedPressedImage.TintColor = FLinearColor(0.4f, 0.035f, 0.025f);
     auto Section = [](const FText& Heading, const FText& Tip, TSharedRef<SWidget> Body) -> TSharedRef<SWidget>
     {
         return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder")).Padding(8)
@@ -57,10 +61,33 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
     };
     auto TypeToggle = [this](const FText& Label, const FText& Tip, bool FBlueprintTagFilter::* Field)
     {
-        return SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+        const FCheckBoxStyle* ToggleStyle = Field == &FBlueprintTagFilter::bStaticMeshOnly
+            ? &FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox") : &ExcludeToggleStyle;
+        return SNew(SCheckBox).Style(ToggleStyle)
             .IsChecked_Lambda([this, Field]() { return SearchFilter.*Field ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
             .OnCheckStateChanged_Lambda([this, Field](ECheckBoxState State) { SearchFilter.*Field = State == ECheckBoxState::Checked; Filter(); })
             .ToolTipText(Tip)[ SNew(STextBlock).Text(Label) ];
+    };
+    auto InputAction = [](const FText& Heading, TSharedRef<SWidget> Input, TSharedRef<SWidget> Button) -> TSharedRef<SWidget>
+    {
+        return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(Heading) ]
+            + SVerticalBox::Slot().AutoHeight()
+            [ SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Input ]
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6, 0, 0, 0)[ Button ] ]
+        ];
+    };
+    auto StandaloneAction = [](const FText& Label, const FText& Tip, TSharedRef<SWidget> Button) -> TSharedRef<SWidget>
+    {
+        return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6).ToolTipText(Tip)
+        [ SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+            [ SNew(STextBlock).AutoWrapText(true).Text(Label) ]
+            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6, 0, 0, 0)[ Button ] ];
     };
     PropertyHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &SBlueprintTagManager::OnPropertyChanged);
     if (GEditor)
@@ -119,7 +146,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 0, 0, 5)
             [ TypeToggle(LOCTEXT("MeshOnly", "StaticMesh only"),
-                LOCTEXT("MeshOnlyHelp", "Show StaticMeshComponent and derived types. The independent HISM / ISM exclusions below still apply. Actor Tags and whole-Blueprint summaries stay separate."),
+                LOCTEXT("MeshOnlyHelp", "Show StaticMeshComponent and derived types. The independent HISM / ISM exclusions below still apply. Components (shown) summarizes matching components; Actor Tags stay separate."),
                 &FBlueprintTagFilter::bStaticMeshOnly) ]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 0, 0, 5)
             [ TypeToggle(LOCTEXT("ExcludeHISM", "Exclude HISM"),
@@ -194,45 +221,51 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             + SVerticalBox::Slot().AutoHeight()
             [
                 SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
-                + SSplitter::Slot().Value(0.5f).MinSize(145)
+                + SSplitter::Slot().Value(0.5f).MinSize(230)
                 [ Section(LOCTEXT("CheckedHeading", "Checked targets"),
                     LOCTEXT("CheckedTip", "These operations do not use Existing tag."),
                     SNew(SVerticalBox)
-                    + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
-                    [ SNew(STextBlock).AutoWrapText(true).Text(LOCTEXT("CheckedHelp", "Add a tag or clear all tags. Existing tag is ignored.")) ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
-                    [ SAssignNew(AddTagInput, SEditableTextBox).HintText(LOCTEXT("AddTag", "Tag to add"))
-                        .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }) ]
                     + SVerticalBox::Slot().AutoHeight()
-                    [ SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
-                        .IsEnabled_Lambda([this]() { return CanEditResults(); })
-                        + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Add", "Preview add"))
+                    [ InputAction(LOCTEXT("AddHeading", "Add a tag"),
+                        SAssignNew(AddTagInput, SEditableTextBox).HintText(LOCTEXT("AddTag", "Tag to add (Add only)"))
+                            .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }),
+                        SNew(SButton).Text(LOCTEXT("Add", "Preview add"))
+                            .IsEnabled_Lambda([this]() { return CanEditResults(); })
                             .ToolTipText(LOCTEXT("AddTip", "Add Tag to add to each checked matching target. Existing tag and Replacement tag are ignored."))
-                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Add) ]
-                        + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Clear", "Preview clear"))
+                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Add)) ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0, 6)
+                    [ SNew(SSeparator) ]
+                    + SVerticalBox::Slot().AutoHeight()
+                    [ StandaloneAction(LOCTEXT("ClearHeading", "Clear all tags"),
+                        LOCTEXT("ClearNoInputs", "No tag inputs are required. This action clears all tags on checked matching targets."),
+                        SNew(SButton).Text(LOCTEXT("Clear", "Preview clear"))
+                            .IsEnabled_Lambda([this]() { return CanEditResults(); })
                             .ToolTipText(LOCTEXT("ClearTip", "Clear every tag on each checked matching target. All tag input fields are ignored."))
-                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Clear) ]
-                    ]) ]
-                + SSplitter::Slot().Value(0.5f).MinSize(145)
+                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Clear)) ]) ]
+                + SSplitter::Slot().Value(0.5f).MinSize(230)
                 [ Section(LOCTEXT("ExistingHeading", "Match an existing tag"),
                     LOCTEXT("ExistingTip", "Only matching Existing tag values on checked matching targets are renamed or removed."),
                     SNew(SVerticalBox)
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
                     [ SAssignNew(OldTagInput, SEditableTextBox).HintText(LOCTEXT("Old", "Existing tag (rename / remove)"))
                         .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }) ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
-                    [ SAssignNew(NewTagInput, SEditableTextBox).HintText(LOCTEXT("New", "Replacement tag (rename only)"))
-                        .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }) ]
                     + SVerticalBox::Slot().AutoHeight()
-                    [ SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
-                        .IsEnabled_Lambda([this]() { return CanEditResults(); })
-                        + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Rename", "Preview rename"))
+                    [ InputAction(LOCTEXT("RenameHeading", "Rename a tag"),
+                        SAssignNew(NewTagInput, SEditableTextBox).HintText(LOCTEXT("New", "Replacement tag (Rename only)"))
+                            .OnTextChanged_Lambda([this](const FText&) { InvalidatePreview(); }),
+                        SNew(SButton).Text(LOCTEXT("Rename", "Preview rename"))
+                            .IsEnabled_Lambda([this]() { return CanEditResults(); })
                             .ToolTipText(LOCTEXT("RenameTip", "Rename Existing tag to Replacement tag within checked matching targets."))
-                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Rename) ]
-                        + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Remove", "Preview remove"))
+                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Rename)) ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0, 6)
+                    [ SNew(SSeparator) ]
+                    + SVerticalBox::Slot().AutoHeight()
+                    [ StandaloneAction(LOCTEXT("RemoveHeading", "Remove existing tag"),
+                        LOCTEXT("RemoveInput", "Only Existing tag is used. Replacement tag and Tag to add are ignored."),
+                        SNew(SButton).Text(LOCTEXT("Remove", "Preview remove"))
+                            .IsEnabled_Lambda([this]() { return CanEditResults(); })
                             .ToolTipText(LOCTEXT("RemoveTip", "Remove Existing tag from checked matching targets. Other input fields are ignored."))
-                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Remove) ]
-                    ]) ]
+                            .OnClicked(this, &SBlueprintTagManager::MakePreview, EBlueprintTagOperation::Remove)) ]) ]
             ]
         ]);
 
@@ -261,7 +294,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             + SVerticalBox::Slot().FillHeight(1)
             [
                 SNew(SSplitter).Orientation(Orient_Vertical).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
-                + SSplitter::Slot().Value(0.28f).MinSize(64)
+                + SSplitter::Slot().Value(0.26f).MinSize(64)
                 [
                     SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
                     + SSplitter::Slot().Value(0.34f).MinSize(140)[ ScanPanel ]
@@ -269,13 +302,13 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
                     + SSplitter::Slot().Value(0.33f).MinSize(140)[ FilterPanel ]
                 ]
                 + SSplitter::Slot().Value(0.30f).MinSize(100)[ BlueprintPanel ]
-                + SSplitter::Slot().Value(0.24f).MinSize(80)
+                + SSplitter::Slot().Value(0.28f).MinSize(80)
                 [
                     SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
                     + SSplitter::Slot().Value(0.3f).MinSize(140)[ InventoryPanel ]
-                    + SSplitter::Slot().Value(0.7f).MinSize(310)[ BatchPanel ]
+                    + SSplitter::Slot().Value(0.7f).MinSize(490)[ BatchPanel ]
                 ]
-                + SSplitter::Slot().Value(0.18f).MinSize(70)[ PreviewPanel ]
+                + SSplitter::Slot().Value(0.16f).MinSize(70)[ PreviewPanel ]
             ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 5, 0, 4)
             [ SNew(STextBlock).AutoWrapText(true).Text_Lambda([this]() { return Status; }) ]
