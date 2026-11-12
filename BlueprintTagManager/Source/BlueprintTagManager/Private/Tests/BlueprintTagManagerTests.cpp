@@ -20,6 +20,7 @@
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
 #include "Framework/Docking/TabManager.h"
 #include "Framework/Application/SlateApplication.h"
@@ -563,6 +564,178 @@ bool FBlueprintTagStaticMeshTest::RunTest(const FString& Parameters)
     UBlueprint* Native = MakeBlueprint(AStaticMeshActor::StaticClass());
     TestTrue(TEXT("Native C++ StaticMesh component detected"), FBlueprintTagService::Gather(Native).ContainsByPredicate([](const auto& Target)
         { return Target.Kind == EBlueprintTagTargetKind::NativeComponent && Target.bStaticMeshComponent; }));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintTagThumbnailTest, "BlueprintTagManager.ThumbnailDisplay",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBlueprintTagThumbnailTest::RunTest(const FString& Parameters)
+{
+    using namespace BlueprintTagManagerTests;
+    UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+    UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+    UStaticMesh* Cone = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cone.Cone"));
+    if (!TestNotNull(TEXT("Cube mesh"), Cube) || !TestNotNull(TEXT("Sphere mesh"), Sphere)
+        || !TestNotNull(TEXT("Cone mesh"), Cone)) { return false; }
+    const FString Name = TEXT("/Game/BTM_Thumbnails_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/BP_ThumbnailPreview");
+    UPackage* Package = CreatePackage(*Name);
+    UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), Package,
+        FName(TEXT("BP_ThumbnailPreview")), BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
+    if (!TestNotNull(TEXT("Thumbnail Blueprint"), Blueprint)) { return false; }
+    USCS_Node* Root = Blueprint->SimpleConstructionScript->CreateNode(UBoxComponent::StaticClass(), TEXT("NonMeshSensor"));
+    Root->ComponentTemplate->ComponentTags = { TEXT("SensorTag") };
+    Blueprint->SimpleConstructionScript->AddNode(Root);
+    auto AddMesh = [Blueprint, Root](UClass* Class, const TCHAR* Label, UStaticMesh* Asset, FVector Location)
+    {
+        USCS_Node* Node = Blueprint->SimpleConstructionScript->CreateNode(Class, Label);
+        auto* Component = CastChecked<UStaticMeshComponent>(Node->ComponentTemplate);
+        Component->SetStaticMesh(Asset);
+        Component->SetRelativeLocation(Location);
+        if (Asset)
+        {
+            if (auto* Instanced = Cast<UInstancedStaticMeshComponent>(Component)) { Instanced->AddInstance(FTransform::Identity); }
+        }
+        Root->AddChildNode(Node);
+        return Node;
+    };
+    USCS_Node* MeshNode = AddMesh(UStaticMeshComponent::StaticClass(), TEXT("StaticMesh_Cube"), Cube, FVector(-120, 0, 0));
+    AddMesh(UInstancedStaticMeshComponent::StaticClass(), TEXT("ISM_Sphere"), Sphere, FVector::ZeroVector);
+    AddMesh(UHierarchicalInstancedStaticMeshComponent::StaticClass(), TEXT("HISM_Cone"), Cone, FVector(120, 0, 0));
+    AddMesh(UStaticMeshComponent::StaticClass(), TEXT("UnassignedMesh"), nullptr, FVector::ZeroVector);
+    AddMesh(UInstancedStaticMeshComponent::StaticClass(), TEXT("UnassignedISM"), nullptr, FVector::ZeroVector);
+    AddMesh(UHierarchicalInstancedStaticMeshComponent::StaticClass(), TEXT("UnassignedHISM"), nullptr, FVector::ZeroVector);
+    CastChecked<AActor>(Blueprint->GeneratedClass->GetDefaultObject())->Tags = { TEXT("ActorTag") };
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    FAssetRegistryModule::AssetCreated(Blueprint);
+
+    // Effective inherited overrides must show the child's mesh, not the parent's.
+    UBlueprint* Child = MakeBlueprint(Blueprint->GeneratedClass);
+    auto* Override = Cast<UStaticMeshComponent>(Child->GetInheritableComponentHandler(true)->CreateOverridenComponentTemplate(FComponentKey(MeshNode)));
+    if (TestNotNull(TEXT("Child mesh override"), Override)) { Override->SetStaticMesh(Sphere); }
+    int32 InheritedMeshes = 0;
+    for (const auto& Target : FBlueprintTagService::Gather(Child))
+    {
+        if (Target.Label == TEXT("StaticMesh_Cube"))
+        {
+            FBlueprintTagOwnerRow Row; Row.Blueprint = Child; Row.Target = Target;
+            TestTrue(TEXT("Inherited thumbnail uses the child's assigned asset"), SBlueprintTagManager::ResolveThumbnailAsset(Row) == Sphere);
+            ++InheritedMeshes;
+        }
+    }
+    TestEqual(TEXT("Inherited mesh target found once"), InheritedMeshes, 1);
+    TestTrue(TEXT("Reading the child thumbnail preserves the parent asset"), CastChecked<UStaticMeshComponent>(MeshNode->ComponentTemplate)->GetStaticMesh() == Cube);
+    UBlueprint* Native = MakeBlueprint(AStaticMeshActor::StaticClass());
+    auto* NativeActor = CastChecked<AStaticMeshActor>(Native->GeneratedClass->GetDefaultObject());
+    NativeActor->GetStaticMeshComponent()->SetStaticMesh(Cone);
+    int32 NativeMeshes = 0;
+    for (const auto& Target : FBlueprintTagService::Gather(Native))
+    {
+        if (Target.bStaticMeshComponent)
+        {
+            FBlueprintTagOwnerRow Row; Row.Blueprint = Native; Row.Target = Target;
+            TestTrue(TEXT("Native component thumbnail uses its assigned asset"), SBlueprintTagManager::ResolveThumbnailAsset(Row) == Cone);
+            ++NativeMeshes;
+        }
+    }
+    TestEqual(TEXT("Native mesh target found once"), NativeMeshes, 1);
+    auto& Kismet = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
+    const int32 EditorsBefore = Kismet.GetBlueprintEditors().Num();
+    const auto Tab = FGlobalTabmanager::Get()->TryInvokeTab(FName(TEXT("BlueprintTagManager.Project")));
+    if (!TestTrue(TEXT("Thumbnail panel opens"), Tab.IsValid())) { FAssetRegistryModule::AssetDeleted(Blueprint); Package->SetDirtyFlag(false); return false; }
+    const auto Widget = StaticCastSharedRef<SBlueprintTagManager>(Tab->GetContent());
+    TestFalse(TEXT("Blueprint thumbnails default off"), Widget->GetThumbnailOptions().bBlueprints);
+    TestFalse(TEXT("Mesh thumbnails default off"), Widget->GetThumbnailOptions().bStaticMeshComponents);
+    TestEqual(TEXT("Default thumbnail size is 32 pixels"), Widget->GetThumbnailOptions().Size, 32);
+    FBlueprintTagFilter Filter; Filter.Blueprint = Name; Filter.bStaticMeshOnly = false;
+    Widget->SetFilter(Filter);
+    Widget->RequestScan();
+    for (int32 Frame = 0; Frame < 200 && Widget->IsScanInProgress(); ++Frame) { Widget->Tick(FGeometry(), FPlatformTime::Seconds(), 0.016f); }
+    if (!TestEqual(TEXT("One thumbnail Blueprint found"), Widget->GetGroups().Num(), 1))
+    { Tab->RequestCloseTab(); FAssetRegistryModule::AssetDeleted(Blueprint); Package->SetDirtyFlag(false); return false; }
+    const auto Group = Widget->GetGroups()[0];
+    TestTrue(TEXT("Blueprint group resolves to the Blueprint asset"), SBlueprintTagManager::ResolveThumbnailAsset(*Group) == Blueprint);
+    TestEqual(TEXT("Actor and seven component targets"), Group->Children.Num(), 8);
+    for (const auto& Row : Group->Children)
+    {
+        UObject* Asset = SBlueprintTagManager::ResolveThumbnailAsset(*Row);
+        if (Row->Target.Label == TEXT("StaticMesh_Cube")) { TestTrue(TEXT("StaticMesh thumbnail is the cube asset"), Asset == Cube); }
+        else if (Row->Target.Label == TEXT("ISM_Sphere")) { TestTrue(TEXT("ISM thumbnail is the sphere asset"), Asset == Sphere); }
+        else if (Row->Target.Label == TEXT("HISM_Cone")) { TestTrue(TEXT("HISM thumbnail is the cone asset"), Asset == Cone); }
+        else { TestNull(TEXT("Actor, non-mesh, and unassigned meshes have no thumbnail asset"), Asset); }
+    }
+    Group->SetChecked(true);
+    Widget->ExpandGroups(true);
+    const auto OriginalMatches = Widget->GetMatchingTargets();
+    const FString OriginalSummary = Group->Summary;
+    for (const bool bBlueprints : { false, true })
+    {
+        for (const bool bComponents : { false, true })
+        {
+            for (const int32 Size : { 16, 32, 64 })
+            {
+                FBlueprintTagThumbnailOptions Options; Options.bBlueprints = bBlueprints; Options.bStaticMeshComponents = bComponents; Options.Size = Size;
+                Widget->SetThumbnailOptions(Options);
+                TestEqual(TEXT("Chosen thumbnail size retained"), Widget->GetThumbnailOptions().Size, Size);
+                TestEqual(TEXT("Blueprint thumbnail visibility is independent"), Widget->ShouldShowThumbnail(*Group), bBlueprints);
+                for (const auto& Row : Group->Children)
+                {
+                    TestEqual(TEXT("Component visibility includes explicit No image placeholders"), Widget->ShouldShowThumbnail(*Row),
+                        bComponents && Row->Target.Kind != EBlueprintTagTargetKind::Actor);
+                    TestTrue(TEXT("Display settings preserve checked targets"), Row->bChecked);
+                }
+                TestTrue(TEXT("Display settings preserve batch matching scope"), Widget->GetMatchingTargets() == OriginalMatches);
+                TestEqual(TEXT("Display settings preserve tag summaries"), Group->Summary, OriginalSummary);
+                TestTrue(TEXT("Display settings preserve expansion"), Widget->IsGroupExpanded(Group));
+            }
+        }
+    }
+    FBlueprintTagThumbnailOptions Defaults;
+    Widget->SetThumbnailOptions(Defaults);
+    TestFalse(TEXT("Changing thumbnail settings does not start a scan"), Widget->IsScanInProgress());
+    const bool bCapture = FParse::Param(FCommandLine::Get(), TEXT("BTMCaptureUI"));
+    if (bCapture)
+    {
+        if (const auto Window = FSlateApplication::Get().FindWidgetWindow(Widget)) { Window->Resize(FVector2D(1440, 1800)); }
+        auto QueueCapture = [this, Widget](bool bBlueprints, bool bComponents, int32 Size, const TCHAR* Filename)
+        {
+            ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([Widget, bBlueprints, bComponents, Size]()
+            {
+                FBlueprintTagThumbnailOptions Options; Options.bBlueprints = bBlueprints; Options.bStaticMeshComponents = bComponents; Options.Size = Size;
+                Widget->SetThumbnailOptions(Options);
+                return true;
+            }));
+            const FString OutputName(Filename);
+            // Yield actual editor frames so the engine thumbnail pool can render.
+            ADD_LATENT_AUTOMATION_COMMAND(FDelayedFunctionLatentCommand([this, Widget, OutputName]()
+            {
+                Widget->SlatePrepass();
+                TArray<FColor> Pixels; FIntVector ImageSize;
+                if (TestTrue(TEXT("Capture thumbnail options"), FSlateApplication::Get().TakeScreenshot(Widget, Pixels, ImageSize)))
+                {
+                    TArray64<uint8> PNG;
+                    FImageUtils::PNGCompressImageArray(ImageSize.X, ImageSize.Y, Pixels, PNG);
+                    TestTrue(TEXT("Save thumbnail capture"), FFileHelper::SaveArrayToFile(PNG, *FPaths::Combine(FPaths::ProjectSavedDir(), OutputName)));
+                }
+            }, 1.0f));
+        };
+        QueueCapture(false, false, 32, TEXT("BlueprintTagManager-Thumbnails-Off.png"));
+        QueueCapture(true, false, 32, TEXT("BlueprintTagManager-Thumbnails-Blueprints.png"));
+        QueueCapture(false, true, 32, TEXT("BlueprintTagManager-Thumbnails-Meshes.png"));
+        QueueCapture(true, true, 16, TEXT("BlueprintTagManager-Thumbnails-Both16.png"));
+        QueueCapture(true, true, 32, TEXT("BlueprintTagManager-Thumbnails-Both32.png"));
+        QueueCapture(true, true, 64, TEXT("BlueprintTagManager-Thumbnails-Both64.png"));
+    }
+    ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, Tab, Widget, Blueprint, Package, EditorsBefore]()
+    {
+        auto& Module = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
+        TestEqual(TEXT("Thumbnails do not open Blueprint editors"), Module.GetBlueprintEditors().Num(), EditorsBefore);
+        TestTrue(TEXT("Thumbnails preserve actor tags"), CastChecked<AActor>(Blueprint->GeneratedClass->GetDefaultObject())->Tags == TArray<FName>({TEXT("ActorTag")}));
+        Tab->RequestCloseTab();
+        FAssetRegistryModule::AssetDeleted(Blueprint);
+        Package->SetDirtyFlag(false);
+        return true;
+    }));
     return true;
 }
 

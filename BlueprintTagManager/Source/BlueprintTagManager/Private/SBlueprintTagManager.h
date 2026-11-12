@@ -10,6 +10,14 @@
 #include "Widgets/Views/STreeView.h"
 
 class SEditableTextBox;
+class FAssetThumbnailPool;
+
+struct FBlueprintTagThumbnailOptions
+{
+    bool bBlueprints = false;
+    bool bStaticMeshComponents = false;
+    int32 Size = 32;
+};
 
 struct FBlueprintTagInventoryRow
 {
@@ -38,6 +46,10 @@ public:
     bool IsGroupExpanded(const TSharedPtr<FBlueprintTagOwnerRow>& Group) const;
     FReply ExpandGroups(bool bExpand);
     FReply ToggleGroup(TSharedPtr<FBlueprintTagOwnerRow> Group);
+    const FBlueprintTagThumbnailOptions& GetThumbnailOptions() const { return ThumbnailOptions; }
+    void SetThumbnailOptions(const FBlueprintTagThumbnailOptions& Value);
+    bool ShouldShowThumbnail(const FBlueprintTagOwnerRow& Row) const;
+    static UObject* ResolveThumbnailAsset(const FBlueprintTagOwnerRow& Row);
 
 private:
     bool CanWork() const;
@@ -73,6 +85,7 @@ private:
     TArray<FBlueprintTagAssetChange> PendingChanges;
     TArray<TSharedPtr<FString>> PreviewRows;
     TSet<FSoftObjectPath> ChangedAssets;
+    TSharedPtr<FAssetThumbnailPool> ThumbnailPool;
     TSharedPtr<STreeView<TSharedPtr<FBlueprintTagOwnerRow>>> OwnerTree;
     TSharedPtr<SListView<TSharedPtr<FBlueprintTagInventoryRow>>> InventoryList;
     TSharedPtr<SListView<TSharedPtr<FString>>> PreviewList;
@@ -81,6 +94,7 @@ private:
     TSharedPtr<SEditableTextBox> OldTagInput;
     TSharedPtr<SEditableTextBox> NewTagInput;
     FBlueprintTagFilter SearchFilter;
+    FBlueprintTagThumbnailOptions ThumbnailOptions;
     FCheckBoxStyle ExcludeToggleStyle;
     FText Status;
     FString ScanFailures;

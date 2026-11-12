@@ -107,7 +107,7 @@ if ($RunTests) {
     $reportFile = Join-Path $reportDir 'index.json'
     if (-not (Test-Path -LiteralPath $reportFile)) { throw 'Automation did not export a test report.' }
     $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
-    if ($report.failed -gt 0 -or $report.succeededWithWarnings -gt 0 -or $report.notRun -gt 0 -or $report.succeeded -ne 8) { throw "Tests incomplete or failed. See $reportFile" }
+    if ($report.failed -gt 0 -or $report.succeededWithWarnings -gt 0 -or $report.notRun -gt 0 -or $report.succeeded -ne 9) { throw "Tests incomplete or failed. See $reportFile" }
 }
 
 $taskVersion = (Get-Content -LiteralPath $pluginFile -Raw | ConvertFrom-Json).VersionName

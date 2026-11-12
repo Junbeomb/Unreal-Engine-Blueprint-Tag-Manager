@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.4
+# Blueprint Tag Manager 1.0.5
 
 A project-wide Unreal Engine editor tool for **Actor Tags** and **Component Tags**, targeting **UE 5.0 through 5.8**. Manage Actor Blueprints from the **main editor**, without opening each Blueprint asset.
 
@@ -25,9 +25,11 @@ A project-wide Unreal Engine editor tool for **Actor Tags** and **Component Tags
 
 The panel separates **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview** with labeled sections. Drag the dividers to resize the section heights and widths. Drag table header dividers to resize columns. Reduced control sections can be scrolled; size adjustments remain in the current panel session.
 
+In **Blueprints & components > Thumbnails**, independently toggle **Blueprints** and **Static Mesh components**. Both default to **off**; enable either or both. Blueprint group rows show the Blueprint asset thumbnail. Component rows show their effective assigned Static Mesh asset, including ISM, HISM, inherited overrides, and native components. Unassigned meshes and other component types show **No image** when component thumbnails are enabled; Actor Tags keep their normal text row. Choose **16x16**, **32x32** (default), or **64x64** for both types. Display settings remain in the current panel session and preserve filters, checks, expansion, and edit previews. Thumbnails are requested only for visible rows when enabled; real-time hover rendering is disabled.
+
 ## Install a release ZIP
 
-Download **BlueprintTagManager-1.0.4-UE5.0-5.8-Win64.zip** and extract it. Close the project's Unreal Editor, then run this command from the extracted folder, substituting your own project and engine paths:
+Download **BlueprintTagManager-1.0.5-UE5.0-5.8-Win64.zip** and extract it. Close the project's Unreal Editor, then run this command from the extracted folder, substituting your own project and engine paths:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Install-BlueprintTagManager.ps1 -ProjectFile 'D:\Projects\MyGame\MyGame.uproject' -EngineRoot 'C:\Program Files\Epic Games\UE_5.3'

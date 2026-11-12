@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.4
+# Blueprint Tag Manager 1.0.5
 
 An Unreal Engine editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. The source targets **UE 5.0 through 5.8**. Blueprints do not need to be opened individually.
 
@@ -8,7 +8,7 @@ Verified engine builds are **5.3.2**, **5.5.4**, and **5.7.4**. Other versions i
 
 ## Installation
 
-1. Download **BlueprintTagManager-1.0.4-UE5.0-5.8-Win64.zip**, extract it, and close your project's Unreal Editor.
+1. Download **BlueprintTagManager-1.0.5-UE5.0-5.8-Win64.zip**, extract it, and close your project's Unreal Editor.
 2. From the extracted folder, run the installer with your project file and engine installation:
 
 ```powershell
@@ -73,6 +73,20 @@ All nonempty fields must match. Within each field, all space-separated terms mus
 | Without tags | Retains every Blueprint and its Actor Tags row regardless of actor tag presence; displays only untagged components |
 
 Type and text filters also apply. A Blueprint whose actor and every component have tags is labeled **All targets have tags**. **Actor tags: Present / None** reports actual actor tag presence, not search matching.
+
+## Thumbnails
+
+The **Thumbnails** controls above the list are separate from tag searches and filters:
+
+| Control | Behavior |
+| --- | --- |
+| Blueprints | Show the Blueprint asset thumbnail beside the group name |
+| Static Mesh components | Show the assigned Static Mesh asset thumbnail, including ISM and HISM |
+| Size | Choose 16x16, 32x32, or 64x64 for both thumbnail types |
+
+Both switches default to **off**, and size defaults to **32x32**. Enable Blueprint images only, component images only, both, or neither. When component images are enabled, unassigned meshes and non-StaticMesh component rows display **No image**. Actor Tags remain a text-only row. Inherited components use the child's effective mesh assignment; native components use their Blueprint defaults.
+
+Settings last for the current panel session. Changing display options keeps the current scan results, tag filters, checked targets, group expansion, and edit preview. Opening a panel still does not scan automatically. The virtualized list requests asset thumbnails for visible enabled rows using a shared bounded pool, with real-time hover rendering disabled.
 
 ## Selection and batch editing
 

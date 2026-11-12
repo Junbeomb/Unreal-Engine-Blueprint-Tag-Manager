@@ -1,7 +1,10 @@
 #include "SBlueprintTagManager.h"
 
+#include "AssetThumbnail.h"
+#include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
+#include "Engine/StaticMesh.h"
 #include "FileHelpers.h"
 #include "GameFramework/Actor.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -16,6 +19,7 @@
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Layout/SSplitter.h"
@@ -23,6 +27,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/SHeaderRow.h"
 #include "Widgets/Views/SExpanderArrow.h"
+#include "Widgets/SNullWidget.h"
 
 #define LOCTEXT_NAMESPACE "BlueprintTagManager"
 
@@ -80,6 +85,31 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
                 + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Input ]
                 + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6, 0, 0, 0)[ Button ] ]
         ];
+    };
+    auto ThumbnailToggle = [this](const FText& Label, const FText& Tip, bool FBlueprintTagThumbnailOptions::* Field)
+    {
+        return SNew(SCheckBox).Style(FBlueprintTagStyle::Get(), "ToggleButtonCheckbox")
+            .IsChecked_Lambda([this, Field]() { return ThumbnailOptions.*Field ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+            .OnCheckStateChanged_Lambda([this, Field](ECheckBoxState State)
+                {
+                    auto Options = ThumbnailOptions;
+                    Options.*Field = State == ECheckBoxState::Checked;
+                    SetThumbnailOptions(Options);
+                })
+            .ToolTipText(Tip)[ SNew(STextBlock).Text(Label) ];
+    };
+    auto ThumbnailSizeButton = [this](int32 Size)
+    {
+        return SNew(SCheckBox).Style(FBlueprintTagStyle::Get(), "ToggleButtonCheckbox")
+            .IsChecked_Lambda([this, Size]() { return ThumbnailOptions.Size == Size ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+            .OnCheckStateChanged_Lambda([this, Size](ECheckBoxState)
+                {
+                    auto Options = ThumbnailOptions;
+                    Options.Size = Size;
+                    SetThumbnailOptions(Options);
+                })
+            .ToolTipText(LOCTEXT("ThumbnailSizeHelp", "Thumbnail size in pixels for both Blueprint and Static Mesh images. Display settings do not change tag filters or checked targets."))
+            [ SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%dx%d"), Size, Size))) ];
     };
     auto StandaloneAction = [](const FText& Label, const FText& Tip, TSharedRef<SWidget> Button) -> TSharedRef<SWidget>
     {
@@ -188,6 +218,27 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
                 .OnClicked_Lambda([this]() { RefreshRows(); return FReply::Handled(); }) ]
             + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("ExpandAll", "Expand all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, true) ]
             + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("CollapseAll", "Collapse all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, false) ]
+        ]
+        + SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 4)
+        [ SNew(SSeparator) ]
+        + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
+        [
+            SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6, 4))
+            + SWrapBox::Slot().VAlign(VAlign_Center)
+            [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Thumbnails", "Thumbnails")) ]
+            + SWrapBox::Slot()
+            [ ThumbnailToggle(LOCTEXT("BlueprintThumbnails", "Blueprints"),
+                LOCTEXT("BlueprintThumbnailHelp", "Show each Blueprint asset's thumbnail on its group row. Off by default; independent of component thumbnails."),
+                &FBlueprintTagThumbnailOptions::bBlueprints) ]
+            + SWrapBox::Slot()
+            [ ThumbnailToggle(LOCTEXT("MeshThumbnails", "Static Mesh components"),
+                LOCTEXT("MeshThumbnailHelp", "Show the assigned Static Mesh asset's thumbnail on component rows, including ISM and HISM. Unassigned meshes and non-StaticMesh components show No image. Off by default."),
+                &FBlueprintTagThumbnailOptions::bStaticMeshComponents) ]
+            + SWrapBox::Slot().VAlign(VAlign_Center).Padding(FMargin(6, 0, 0, 0))
+            [ SNew(STextBlock).Text(LOCTEXT("ThumbnailSize", "Size")) ]
+            + SWrapBox::Slot()[ ThumbnailSizeButton(16) ]
+            + SWrapBox::Slot()[ ThumbnailSizeButton(32) ]
+            + SWrapBox::Slot()[ ThumbnailSizeButton(64) ]
         ]
         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
         [ SNew(STextBlock).AutoWrapText(true).Text(this, &SBlueprintTagManager::GetSelectionText) ]
@@ -454,6 +505,35 @@ void SBlueprintTagManager::Filter()
 }
 
 void SBlueprintTagManager::SetFilter(const FBlueprintTagFilter& Value) { SearchFilter = Value; Filter(); }
+
+void SBlueprintTagManager::SetThumbnailOptions(const FBlueprintTagThumbnailOptions& Value)
+{
+    auto Options = Value;
+    if (Options.Size != 16 && Options.Size != 32 && Options.Size != 64) { Options.Size = 32; }
+    if (Options.bBlueprints == ThumbnailOptions.bBlueprints
+        && Options.bStaticMeshComponents == ThumbnailOptions.bStaticMeshComponents && Options.Size == ThumbnailOptions.Size) { return; }
+    ThumbnailOptions = Options;
+    // Recreate visible row widgets without filtering or invalidating an edit preview.
+    // The tree keeps the same items, check states, and expansion map.
+    if (OwnerTree) { OwnerTree->RebuildList(); }
+}
+
+bool SBlueprintTagManager::ShouldShowThumbnail(const FBlueprintTagOwnerRow& Row) const
+{
+    return Row.bGroup ? ThumbnailOptions.bBlueprints
+        : ThumbnailOptions.bStaticMeshComponents && Row.Target.Kind != EBlueprintTagTargetKind::Actor;
+}
+
+UObject* SBlueprintTagManager::ResolveThumbnailAsset(const FBlueprintTagOwnerRow& Row)
+{
+    if (Row.bGroup) { return Row.Blueprint.Get(); }
+    if (Row.Target.Kind == EBlueprintTagTargetKind::Actor) { return nullptr; }
+    // Use the effective template gathered for this Blueprint, including child
+    // overrides and native defaults. ISM and HISM inherit StaticMeshComponent.
+    const UStaticMeshComponent* Component = Cast<UStaticMeshComponent>(Row.Target.Object.Get());
+    return Component ? Component->GetStaticMesh() : nullptr;
+}
+
 bool SBlueprintTagManager::IsGroupExpanded(const TSharedPtr<FBlueprintTagOwnerRow>& Group) const
 { return OwnerTree && OwnerTree->IsItemExpanded(Group); }
 
@@ -617,18 +697,33 @@ FReply SBlueprintTagManager::OpenBlueprint(TSharedPtr<FBlueprintTagOwnerRow> Ite
 
 TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTagOwnerRow> Item, const TSharedRef<STableViewBase>& Owner)
 {
+    const bool bShowThumbnail = ShouldShowThumbnail(*Item);
+    UObject* ThumbnailAsset = bShowThumbnail ? ResolveThumbnailAsset(*Item) : nullptr;
+    // No asset thumbnail objects or render pool are created while both switches
+    // are off. The virtualized tree only requests thumbnails for visible rows.
+    if (ThumbnailAsset && !ThumbnailPool) { ThumbnailPool = MakeShared<FAssetThumbnailPool>(128); }
     class SOwnerRow : public SMultiColumnTableRow<TSharedPtr<FBlueprintTagOwnerRow>>
     {
     public:
-        SLATE_BEGIN_ARGS(SOwnerRow) {} SLATE_END_ARGS()
+        SLATE_BEGIN_ARGS(SOwnerRow) : _ShowThumbnail(false), _ThumbnailSize(32), _ThumbnailAsset(nullptr) {}
+            SLATE_ARGUMENT(bool, ShowThumbnail)
+            SLATE_ARGUMENT(int32, ThumbnailSize)
+            SLATE_ARGUMENT(UObject*, ThumbnailAsset)
+            SLATE_ARGUMENT(TSharedPtr<FAssetThumbnailPool>, ThumbnailPool)
+        SLATE_END_ARGS()
         TSharedPtr<FBlueprintTagOwnerRow> Item;
         FSimpleDelegate Changed;
         FOnClicked Open;
         FOnClicked Toggle;
-        void Construct(const FArguments&, const TSharedRef<STableViewBase>& Table,
+        TSharedPtr<FAssetThumbnail> Thumbnail;
+        bool bShowThumbnail = false;
+        int32 ThumbnailSize = 32;
+        void Construct(const FArguments& Args, const TSharedRef<STableViewBase>& Table,
             TSharedPtr<FBlueprintTagOwnerRow> InItem, FSimpleDelegate InChanged, FOnClicked InOpen, FOnClicked InToggle)
         {
             Item = InItem; Changed = InChanged; Open = InOpen; Toggle = InToggle;
+            bShowThumbnail = Args._ShowThumbnail; ThumbnailSize = Args._ThumbnailSize;
+            if (Args._ThumbnailAsset) { Thumbnail = MakeShared<FAssetThumbnail>(Args._ThumbnailAsset, ThumbnailSize, ThumbnailSize, Args._ThumbnailPool); }
             SMultiColumnTableRow::Construct(FSuperRowType::FArguments().Padding(4), Table);
         }
         virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& Column) override
@@ -637,6 +732,29 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
             const FSlateFontInfo Font = FBlueprintTagStyle::GetFontStyle(bActor ? "BoldFont" : "NormalFont");
             if (Column == "Target")
             {
+                TSharedRef<SWidget> Preview = SNullWidget::NullWidget;
+                if (bShowThumbnail)
+                {
+                    if (Thumbnail)
+                    {
+                        FAssetThumbnailConfig Config;
+                        Config.bAllowHintText = false;
+                        Config.bAllowRealTimeOnHovered = false;
+                        Config.ThumbnailLabel = EThumbnailLabel::NoLabel;
+                        Preview = SNew(SBox).WidthOverride(ThumbnailSize).HeightOverride(ThumbnailSize)
+                            .ToolTipText(FText::FromString(Thumbnail->GetAssetData().GetFullName()))
+                            [ Thumbnail->MakeThumbnailWidget(Config) ];
+                    }
+                    else
+                    {
+                        Preview = SNew(SBox).MinDesiredWidth(ThumbnailSize).HeightOverride(ThumbnailSize).VAlign(VAlign_Center)
+                            .ToolTipText(Item->bGroup ? LOCTEXT("NoBlueprintImage", "Blueprint asset is unavailable.")
+                                : Item->Target.bStaticMeshComponent ? LOCTEXT("NoMeshImage", "No Static Mesh asset is assigned.")
+                                    : LOCTEXT("NotMeshImage", "This component is not a StaticMeshComponent."))
+                            [ SNew(STextBlock).Text(LOCTEXT("NoImage", "No image"))
+                                .ColorAndOpacity(FSlateColor::UseSubduedForeground()) ];
+                    }
+                }
                 const FString Label = Item->bGroup ? FPackageName::ObjectPathToObjectName(Item->AssetPath)
                     : Item->Target.Kind == EBlueprintTagTargetKind::Actor ? TEXT("Actor Tags") : Item->Target.Label;
                 TSharedRef<SWidget> Name = SNew(STextBlock).Text(FText::FromString(Label))
@@ -664,6 +782,7 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
                             : LOCTEXT("TargetCheck", "Select this target for batch editing."))
                         .IsChecked_Lambda([this]() { return Item->CheckState(); })
                         .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { Item->SetChecked(State == ECheckBoxState::Checked); Changed.ExecuteIfBound(); }) ]
+                    + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, bShowThumbnail ? 6 : 0, 0)[ Preview ]
                     + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Name ];
             }
             const FString Text = Item->bGroup
@@ -681,7 +800,8 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
         }
     };
     return SNew(SOwnerRow, Owner, Item, FSimpleDelegate::CreateSP(this, &SBlueprintTagManager::InvalidatePreview),
-        FOnClicked::CreateSP(this, &SBlueprintTagManager::OpenBlueprint, Item), FOnClicked::CreateSP(this, &SBlueprintTagManager::ToggleGroup, Item));
+        FOnClicked::CreateSP(this, &SBlueprintTagManager::OpenBlueprint, Item), FOnClicked::CreateSP(this, &SBlueprintTagManager::ToggleGroup, Item))
+        .ShowThumbnail(bShowThumbnail).ThumbnailSize(ThumbnailOptions.Size).ThumbnailAsset(ThumbnailAsset).ThumbnailPool(ThumbnailPool);
 }
 
 TSharedRef<ITableRow> SBlueprintTagManager::MakeInventoryRow(TSharedPtr<FBlueprintTagInventoryRow> Item, const TSharedRef<STableViewBase>& Owner)

@@ -75,7 +75,7 @@ foreach ($taskResult in $taskResults) {
     try {
         & (Join-Path $PSScriptRoot 'Build-BlueprintTagManager.ps1') @taskBuildParameters
         $taskResult.Status = 'Built'
-        if ($RunTests) { $taskResult.Tests = '8Passed' }
+        if ($RunTests) { $taskResult.Tests = '9Passed' }
         $taskResult.Archive = 'UE' + $taskResult.Engine + '/Releases/BlueprintTagManager-' + $taskPluginDescriptor.VersionName + '-UE' + $taskResult.Engine + '-Win64.zip'
     }
     catch {
