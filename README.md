@@ -1,5 +1,7 @@
 # Blueprint Tag Manager 1.0.5
 
+![Blueprint Tag Manager editor panel](docs/images/blueprint-tag-manager.png)
+
 A project-wide Unreal Engine editor tool for **Actor Tags** and **Component Tags**, targeting **UE 5.0 through 5.8**. Manage Actor Blueprints from the **main editor**, without opening each Blueprint asset.
 
 **Platform:** Windows x64. Source compatibility targets UE 5.0-5.8; actual build and test results are listed by engine version in the [validation record](BlueprintTagManager/VALIDATION.md). Untested versions are identified explicitly. macOS and Linux are not supported. The UI is in English.

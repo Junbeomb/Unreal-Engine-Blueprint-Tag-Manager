@@ -61,7 +61,7 @@ else {
     $taskPaths = @(Get-ChildItem -LiteralPath $RepositoryRoot -File -Recurse -Force | ForEach-Object {
         $_.FullName.Substring($RepositoryRoot.Length + 1).Replace('\', '/')
     } | Where-Object {
-        $_ -match '^(README\.md|LICENSE|\.gitignore|\.gitattributes|Scripts/[^/]+\.ps1|BlueprintTagManager/(BlueprintTagManager\.uplugin|README\.md|VALIDATION\.md|LICENSE|Source/.+|Config/.+)|Prebuilt/UE5\.[0-8]/BlueprintTagManager/(BlueprintTagManager\.uplugin|Binaries/Win64/(UnrealEditor-BlueprintTagManager\.dll|UnrealEditor\.modules)))$'
+        $_ -match '^(README\.md|LICENSE|\.gitignore|\.gitattributes|docs/images/blueprint-tag-manager\.png|Scripts/[^/]+\.ps1|BlueprintTagManager/(BlueprintTagManager\.uplugin|README\.md|VALIDATION\.md|LICENSE|Source/.+|Config/.+)|Prebuilt/UE5\.[0-8]/BlueprintTagManager/(BlueprintTagManager\.uplugin|Binaries/Win64/(UnrealEditor-BlueprintTagManager\.dll|UnrealEditor\.modules)))$'
     })
 }
 foreach ($taskRelativePath in ($taskPaths | Sort-Object -Unique)) {

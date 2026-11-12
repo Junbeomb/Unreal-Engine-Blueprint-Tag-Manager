@@ -49,6 +49,9 @@ foreach ($taskDoc in @('README.md', 'VALIDATION.md', 'LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot ('BlueprintTagManager\' + $taskDoc)) -Destination $taskPluginStage
 }
 Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'), (Join-Path $taskRoot 'LICENSE') -Destination $taskStage
+$taskImageStage = Join-Path $taskStage 'docs\images'
+New-Item -ItemType Directory -Path $taskImageStage | Out-Null
+Copy-Item -LiteralPath (Join-Path $taskRoot 'docs\images\blueprint-tag-manager.png') -Destination $taskImageStage
 $taskScriptStage = Join-Path $taskStage 'Scripts'
 New-Item -ItemType Directory -Path $taskScriptStage | Out-Null
 Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File | Copy-Item -Destination $taskScriptStage
