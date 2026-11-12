@@ -1,4 +1,5 @@
 #include "BlueprintTagProject.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -48,7 +49,11 @@ bool FBlueprintTagProject::Discover(const FString& Folder, TArray<FAssetData>& O
         return false;
     }
     FARFilter Filter;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0
+    Filter.ClassNames.Add(UBlueprint::StaticClass()->GetFName());
+#else
     Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+#endif
     Filter.bRecursiveClasses = true;
     Filter.bRecursivePaths = true;
     if (!Scope.IsEmpty()) { Filter.PackagePaths.Add(FName(*Scope)); }

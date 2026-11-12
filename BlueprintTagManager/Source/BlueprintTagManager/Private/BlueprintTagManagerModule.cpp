@@ -1,8 +1,9 @@
+#include "BlueprintTagCompilerCompatibility.h"
 #include "Modules/ModuleManager.h"
 
 #include "Framework/Docking/TabManager.h"
 #include "SBlueprintTagManager.h"
-#include "Styling/AppStyle.h"
+#include "BlueprintTagCompatibility.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
 
@@ -20,7 +21,7 @@ public:
             }))
             .SetDisplayName(LOCTEXT("Title", "Blueprint Tag Manager"))
             .SetTooltipText(LOCTEXT("Tip", "Manage tags across all project Actor Blueprints."))
-            .SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Tag"))
+            .SetIcon(FSlateIcon(FBlueprintTagStyle::GetAppStyleSetName(), "Icons.Tag"))
             .SetMenuType(ETabSpawnerMenuType::Hidden);
         UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FBlueprintTagManagerModule::RegisterMenus));
     }
@@ -44,12 +45,12 @@ private:
             UToolMenu* Menu = UToolMenus::Get()->ExtendMenu(MenuName);
             Menu->FindOrAddSection("BlueprintTagManager").AddMenuEntry("OpenBlueprintTagManager",
                 LOCTEXT("Menu", "Blueprint Tag Manager"), LOCTEXT("MenuTip", "Scan project Blueprints and bulk edit actor and component tags."),
-                FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Tag"), Open);
+                FSlateIcon(FBlueprintTagStyle::GetAppStyleSetName(), "Icons.Tag"), Open);
         }
         UToolMenus::Get()->ExtendMenu("LevelEditor.LevelEditorToolBar.User")->FindOrAddSection("BlueprintTagManager")
             .AddEntry(FToolMenuEntry::InitToolBarButton("OpenBlueprintTagManager", Open,
                 LOCTEXT("Toolbar", "Blueprint Tags"), LOCTEXT("ToolbarTip", "Open the project-wide Blueprint Tag Manager."),
-                FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Tag")));
+                FSlateIcon(FBlueprintTagStyle::GetAppStyleSetName(), "Icons.Tag")));
     }
     static const FName TabId;
 };

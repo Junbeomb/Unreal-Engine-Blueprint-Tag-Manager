@@ -7,7 +7,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/ScopedSlowTask.h"
 #include "Misc/PackageName.h"
-#include "Styling/AppStyle.h"
+#include "BlueprintTagCompatibility.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "UObject/UnrealType.h"
 #include "UObject/Package.h"
@@ -28,17 +28,17 @@
 
 void SBlueprintTagManager::Construct(const FArguments& InArgs)
 {
-    ExcludeToggleStyle = FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox");
+    ExcludeToggleStyle = FBlueprintTagStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox");
     ExcludeToggleStyle.CheckedImage.TintColor = FLinearColor(0.55f, 0.055f, 0.045f);
     ExcludeToggleStyle.CheckedHoveredImage.TintColor = FLinearColor(0.7f, 0.085f, 0.065f);
     ExcludeToggleStyle.CheckedPressedImage.TintColor = FLinearColor(0.4f, 0.035f, 0.025f);
     auto Section = [](const FText& Heading, const FText& Tip, TSharedRef<SWidget> Body) -> TSharedRef<SWidget>
     {
-        return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder")).Padding(8)
+        return SNew(SBorder).BorderImage(FBlueprintTagStyle::GetBrush("ToolPanel.GroupBorder")).Padding(8)
         [
             SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight()
-            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(Heading).ToolTipText(Tip) ]
+            [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(Heading).ToolTipText(Tip) ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 5)
             [ SNew(SSeparator) ]
             + SVerticalBox::Slot().FillHeight(1)[ Body ]
@@ -54,7 +54,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
     };
     auto PresenceButton = [this](const FText& Label, EBlueprintTagPresence Value)
     {
-        return SNew(SCheckBox).Style(FAppStyle::Get(), "ToggleButtonCheckbox")
+        return SNew(SCheckBox).Style(FBlueprintTagStyle::Get(), "ToggleButtonCheckbox")
             .IsChecked_Lambda([this, Value]() { return SearchFilter.ComponentPresence == Value ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
             .OnCheckStateChanged_Lambda([this, Value](ECheckBoxState) { SearchFilter.ComponentPresence = Value; Filter(); })
             [ SNew(STextBlock).Text(Label) ];
@@ -62,7 +62,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
     auto TypeToggle = [this](const FText& Label, const FText& Tip, bool FBlueprintTagFilter::* Field)
     {
         const FCheckBoxStyle* ToggleStyle = Field == &FBlueprintTagFilter::bStaticMeshOnly
-            ? &FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox") : &ExcludeToggleStyle;
+            ? &FBlueprintTagStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox") : &ExcludeToggleStyle;
         return SNew(SCheckBox).Style(ToggleStyle)
             .IsChecked_Lambda([this, Field]() { return SearchFilter.*Field ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
             .OnCheckStateChanged_Lambda([this, Field](ECheckBoxState State) { SearchFilter.*Field = State == ECheckBoxState::Checked; Filter(); })
@@ -70,11 +70,11 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
     };
     auto InputAction = [](const FText& Heading, TSharedRef<SWidget> Input, TSharedRef<SWidget> Button) -> TSharedRef<SWidget>
     {
-        return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6)
+        return SNew(SBorder).BorderImage(FBlueprintTagStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6)
         [
             SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
-            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(Heading) ]
+            [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(Heading) ]
             + SVerticalBox::Slot().AutoHeight()
             [ SNew(SHorizontalBox)
                 + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Input ]
@@ -83,7 +83,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
     };
     auto StandaloneAction = [](const FText& Label, const FText& Tip, TSharedRef<SWidget> Button) -> TSharedRef<SWidget>
     {
-        return SNew(SBorder).BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6).ToolTipText(Tip)
+        return SNew(SBorder).BorderImage(FBlueprintTagStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6).ToolTipText(Tip)
         [ SNew(SHorizontalBox)
             + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
             [ SNew(STextBlock).AutoWrapText(true).Text(Label) ]
@@ -112,7 +112,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             [
                 SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
                 + SWrapBox::Slot()
-                [ SNew(SButton).ButtonStyle(FAppStyle::Get(), "PrimaryButton").Text(LOCTEXT("Scan", "Scan project"))
+                [ SNew(SButton).ButtonStyle(FBlueprintTagStyle::Get(), "PrimaryButton").Text(LOCTEXT("Scan", "Scan project"))
                     .IsEnabled_Lambda([this]() { return CanWork() && !IsScanInProgress(); })
                     .OnClicked(this, &SBlueprintTagManager::RequestScan) ]
                 + SWrapBox::Slot()
@@ -273,8 +273,8 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
         LOCTEXT("PreviewTip", "Review the per-asset changes before applying. Apply is one Undo step and does not save assets."),
         SNew(SVerticalBox)
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 0, 0, 4)
-        [ SNew(SButton).ButtonStyle(FAppStyle::Get(), "PrimaryButton").Text(LOCTEXT("Apply", "Apply preview"))
-            .IsEnabled_Lambda([this]() { return CanEditResults() && !PendingChanges.IsEmpty(); }).OnClicked(this, &SBlueprintTagManager::ApplyPreview) ]
+        [ SNew(SButton).ButtonStyle(FBlueprintTagStyle::Get(), "PrimaryButton").Text(LOCTEXT("Apply", "Apply preview"))
+            .IsEnabled_Lambda([this]() { return CanEditResults() && (PendingChanges.Num() > 0); }).OnClicked(this, &SBlueprintTagManager::ApplyPreview) ]
         + SVerticalBox::Slot().FillHeight(1)
         [
             SAssignNew(PreviewList, SListView<TSharedPtr<FString>>).ListItemsSource(&PreviewRows).SelectionMode(ESelectionMode::None)
@@ -288,7 +288,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
         [
             SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
-            [ SNew(STextBlock).Font(FAppStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Title", "Project Blueprint Tag Manager")) ]
+            [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Title", "Project Blueprint Tag Manager")) ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
             [ SNew(STextBlock).AutoWrapText(true).Text(LOCTEXT("Help", "Click Scan project to load targets. Drag the dividers between sections or column headers to adjust their sizes.")) ]
             + SVerticalBox::Slot().FillHeight(1)
@@ -316,10 +316,10 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             [
                 SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
                 + SWrapBox::Slot()
-                [ SNew(SButton).Text(LOCTEXT("Compile", "Compile changed")).IsEnabled_Lambda([this]() { return CanEditResults() && !ChangedAssets.IsEmpty(); })
+                [ SNew(SButton).Text(LOCTEXT("Compile", "Compile changed")).IsEnabled_Lambda([this]() { return CanEditResults() && (ChangedAssets.Num() > 0); })
                     .OnClicked(this, &SBlueprintTagManager::CompileChanged) ]
                 + SWrapBox::Slot()
-                [ SNew(SButton).Text(LOCTEXT("Save", "Save changed...")).IsEnabled_Lambda([this]() { return CanEditResults() && !ChangedAssets.IsEmpty(); })
+                [ SNew(SButton).Text(LOCTEXT("Save", "Save changed...")).IsEnabled_Lambda([this]() { return CanEditResults() && (ChangedAssets.Num() > 0); })
                     .OnClicked(this, &SBlueprintTagManager::SaveChanged) ]
                 + SWrapBox::Slot().VAlign(VAlign_Center)
                 [ SNew(STextBlock).Text_Lambda([this]() { return FText::Format(LOCTEXT("Touched", "{0} assets tracked for compile/save; Ctrl+Z undoes the tag batch."), ChangedAssets.Num()); }) ]
@@ -379,7 +379,7 @@ void SBlueprintTagManager::BeginScan()
     ScanAssets = MoveTemp(Assets);
     ScanIndex = 0; FailedAssets = 0; SkippedAssets = 0;
     ScanFailures.Reset(); bCanceled = false; bRefreshRequested = false;
-    bScanning = !ScanAssets.IsEmpty();
+    bScanning = (ScanAssets.Num() > 0);
     Filter();
 }
 
@@ -390,7 +390,11 @@ void SBlueprintTagManager::ScanNext()
     if (!Blueprint || (Blueprint->ParentClass && Blueprint->ParentClass->IsChildOf(AActor::StaticClass()) && !FBlueprintTagService::CanEdit(Blueprint)))
     {
         ++FailedAssets;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0
+        ScanFailures += Asset.ObjectPath.ToString() + TEXT("\n");
+#else
         ScanFailures += Asset.GetObjectPathString() + TEXT("\n");
+#endif
     }
     else if (FBlueprintTagService::CanEdit(Blueprint))
     {
@@ -541,7 +545,7 @@ FReply SBlueprintTagManager::MakePreview(EBlueprintTagOperation Operation)
         const TSet<FString>* Ids = Selected.Find(Blueprint.Get());
         if (!Ids) { continue; }
         auto Changes = FBlueprintTagService::Preview(Blueprint.Get(), *Ids, Operation, OldTag, NewTag);
-        if (Changes.IsEmpty()) { continue; }
+        if ((Changes.Num() == 0)) { continue; }
         for (const auto& Change : Changes)
         {
             PreviewRows.Add(MakeShared<FString>(Blueprint->GetPathName() + TEXT(" : ") + Change.Label + TEXT("\n  ")
@@ -550,7 +554,7 @@ FReply SBlueprintTagManager::MakePreview(EBlueprintTagOperation Operation)
         PendingChanges.Add({ Blueprint.Get(), MoveTemp(Changes) });
     }
     PreviewList->RequestListRefresh();
-    Status = PendingChanges.IsEmpty() ? LOCTEXT("NoChange", "No changes. Check matching targets and tag names; matching is case-insensitive.")
+    Status = (PendingChanges.Num() == 0) ? LOCTEXT("NoChange", "No changes. Check matching targets and tag names; matching is case-insensitive.")
         : FText::Format(LOCTEXT("Ready", "Preview: {0} targets in {1} Blueprints. Apply is one Undo step; changes are not saved automatically."), PreviewRows.Num(), PendingChanges.Num());
     return FReply::Handled();
 }
@@ -597,7 +601,7 @@ FReply SBlueprintTagManager::SaveChanged()
     {
         if (const UObject* Object = Path.ResolveObject()) { if (Object->GetOutermost()->IsDirty()) { Packages.AddUnique(Object->GetOutermost()); } }
     }
-    if (Packages.IsEmpty()) { Status = LOCTEXT("NothingToSave", "No tracked assets need saving."); return FReply::Handled(); }
+    if ((Packages.Num() == 0)) { Status = LOCTEXT("NothingToSave", "No tracked assets need saving."); return FReply::Handled(); }
     TArray<UPackage*> Failed;
     const auto Result = FEditorFileUtils::PromptForCheckoutAndSave(Packages, true, true, &Failed);
     Status = Result == FEditorFileUtils::PR_Success ? LOCTEXT("Saved", "Changed assets saved.")
@@ -630,19 +634,23 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
         virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& Column) override
         {
             const bool bActor = !Item->bGroup && Item->Target.Kind == EBlueprintTagTargetKind::Actor;
-            const FSlateFontInfo Font = FAppStyle::GetFontStyle(bActor ? "BoldFont" : "NormalFont");
+            const FSlateFontInfo Font = FBlueprintTagStyle::GetFontStyle(bActor ? "BoldFont" : "NormalFont");
             if (Column == "Target")
             {
                 const FString Label = Item->bGroup ? FPackageName::ObjectPathToObjectName(Item->AssetPath)
                     : Item->Target.Kind == EBlueprintTagTargetKind::Actor ? TEXT("Actor Tags") : Item->Target.Label;
                 TSharedRef<SWidget> Name = SNew(STextBlock).Text(FText::FromString(Label))
                     .Font(Font)
-                    .ToolTipText(FText::FromString(Item->bGroup ? Item->AssetPath : Label)).OverflowPolicy(ETextOverflowPolicy::Ellipsis);
+                    .ToolTipText(FText::FromString(Item->bGroup ? Item->AssetPath : Label))
+#if ENGINE_MAJOR_VERSION > 5 || ENGINE_MINOR_VERSION >= 1
+                    .OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+#endif
+                    ;
                 if (Item->bGroup)
                 {
                     Name = SNew(SHorizontalBox)
                         + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
-                        [ SNew(SButton).ButtonStyle(FAppStyle::Get(), "SimpleButton").OnClicked(Toggle)
+                        [ SNew(SButton).ButtonStyle(FBlueprintTagStyle::Get(), "SimpleButton").OnClicked(Toggle)
                             .ToolTipText(FText::FromString(Item->AssetPath + TEXT("\nClick to expand / collapse")))[ Name ] ]
                         + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5, 0, 0, 0)
                         [ SNew(SButton).Text(LOCTEXT("OpenBlueprint", "Open Blueprint")).OnClicked(Open)
@@ -665,7 +673,11 @@ TSharedRef<ITableRow> SBlueprintTagManager::MakeOwnerRow(TSharedPtr<FBlueprintTa
                 : (Column == "Source" ? (bActor ? FString(TEXT("Actor defaults")) : Item->Target.Source) + (Item->Target.bEditable ? TEXT("") : TEXT(" (read only)"))
                     : FBlueprintTagService::FormatTags(Item->Target.Tags));
             return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font)
-                .ToolTipText(FText::FromString(Text)).OverflowPolicy(ETextOverflowPolicy::Ellipsis);
+                .ToolTipText(FText::FromString(Text))
+#if ENGINE_MAJOR_VERSION > 5 || ENGINE_MINOR_VERSION >= 1
+                .OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+#endif
+                ;
         }
     };
     return SNew(SOwnerRow, Owner, Item, FSimpleDelegate::CreateSP(this, &SBlueprintTagManager::InvalidatePreview),

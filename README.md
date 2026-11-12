@@ -1,8 +1,10 @@
-# Blueprint Tag Manager 1.0.3
+# Blueprint Tag Manager 1.0.4
 
-A project-wide Unreal Engine 5.7 editor tool for **Actor Tags** and **Component Tags**. Manage Actor Blueprints from the **main editor**, without opening each Blueprint asset.
+A project-wide Unreal Engine editor tool for **Actor Tags** and **Component Tags**, targeting **UE 5.0 through 5.8**. Manage Actor Blueprints from the **main editor**, without opening each Blueprint asset.
 
-**Platform:** Windows x64, tested with the Epic Games Launcher build of UE 5.7.4. See the [validation record](BlueprintTagManager/VALIDATION.md). Other engine patches and custom builds may require rebuilding. macOS and Linux are not supported. The UI is in English.
+**Platform:** Windows x64. Source compatibility targets UE 5.0-5.8; actual build and test results are listed by engine version in the [validation record](BlueprintTagManager/VALIDATION.md). Untested versions are identified explicitly. macOS and Linux are not supported. The UI is in English.
+
+**Verified engine builds:** UE **5.3.2**, **5.5.4**, and **5.7.4**. One unified Windows ZIP includes these three prebuilt profiles and common source for the full target range. The other versions have not been executed or verified.
 
 [User guide](BlueprintTagManager/README.md)
 
@@ -25,19 +27,47 @@ The panel separates **Project scan**, **Search**, **Filters**, **Blueprints & co
 
 ## Install a release ZIP
 
-Close Unreal Editor, extract `BlueprintTagManager-1.0.3-UE5.7-Win64.zip`, and copy its **BlueprintTagManager** folder into `<YourProject>/Plugins/`. Replace the previous plugin version when upgrading. The descriptor must be at `<YourProject>/Plugins/BlueprintTagManager/BlueprintTagManager.uplugin`. Enable **Edit > Plugins > Blueprint Tag Manager** and restart.
+Download **BlueprintTagManager-1.0.4-UE5.0-5.8-Win64.zip** and extract it. Close the project's Unreal Editor, then run this command from the extracted folder, substituting your own project and engine paths:
 
-Use the separately published **release asset** for prebuilt binaries. GitHub's **Code > Download ZIP** and automatic **Source code (zip)** downloads contain source only. C++ projects need a supported compiler when compiling the project. A custom engine or another patch can require rebuilding the plugin.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Install-BlueprintTagManager.ps1 -ProjectFile 'D:\Projects\MyGame\MyGame.uproject' -EngineRoot 'C:\Program Files\Epic Games\UE_5.3'
+```
+
+The installer reads the selected engine's version and installs into `<YourProject>/Plugins/BlueprintTagManager`. For UE 5.3, 5.5, and 5.7, it selects the bundled prebuilt profile **only if its module Build ID matches the installed engine**. These matching profiles need no local compilation. For UE 5.0, 5.1, 5.2, 5.4, 5.6, 5.8, or a different/custom engine Build ID, it builds the common source using that engine. **Source fallback requires Visual Studio C++ tools and a Windows SDK supported by that engine.** Those six engine versions remain unverified; one download does not mean all nine versions have been tested. No engine or compiler is downloaded by the installer.
+
+When upgrading, add **-Replace**. The previous plugin folder is moved to `<YourProject>/Saved/BlueprintTagManager/Backups/<timestamp>/BlueprintTagManager` before installation; a failed final move attempts to restore it. Existing installations are refused without this option. Backups stay outside Plugins so Unreal does not discover duplicate plugins. Enable **Edit > Plugins > Blueprint Tag Manager** and restart if requested. The installer does not edit the project file.
+
+Use **-BuildFromSource** to bypass prebuilt profiles. Pass **-CompilerVersion** to select a toolset for a source fallback, or **-BuildOutputDirectory** to choose a fresh, short ASCII build path. The compiler option does not change prebuilt selection. For example, a UE 5.3 source build can select an installed MSVC 14.38 toolset with `-BuildFromSource -CompilerVersion '14.38.33130'`.
+
+The ZIP contains a common **BlueprintTagManager** source folder, **Prebuilt/UE5.3**, **Prebuilt/UE5.5**, **Prebuilt/UE5.7**, and **Scripts**. Prebuilt profiles contain only the versioned descriptor, DLL, and module manifest. Use the installer to combine a matching profile with the common source. Copying only the common source folder does not install a prebuilt DLL.
+
+Each DLL is built for one engine version; a UE 5.7 DLL cannot be reused as a universal UE 5.0-5.8 binary. Patches and custom engine builds can also require recompilation. See [Epic's module versioning documentation](https://dev.epicgames.com/documentation/en-us/unreal-engine/versioning-of-assets-and-packages-in-unreal-engine#buildid).
+
+GitHub's **Code > Download ZIP** and automatic **Source code (zip)** downloads contain source without the release ZIP's Prebuilt profiles. The same installer builds source when profiles are absent, or use the build command below and copy its completed plugin folder into your project's Plugins folder. The common source descriptor is not pinned to 5.7; built binary descriptors record the engine minor version they were built for.
 
 ## Build source
 
-Install UE 5.7 plus Visual Studio 2022 with **Game development with C++**, a supported MSVC toolset, and Windows SDK. Keep `Scripts` beside `BlueprintTagManager`, then run from the repository root:
+Install your chosen UE version from **5.0 through 5.8**, plus Visual Studio with **Game development with C++**, an MSVC toolset supported by that engine, and Windows SDK. Keep `Scripts` beside `BlueprintTagManager`, then run from the repository or extracted source root:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Build-BlueprintTagManager.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.7' -RunTests
 ```
 
 Set `-EngineRoot` to your engine installation. The script creates a fresh disposable HostProject and prints the built plugin and checked release ZIP locations. `-OutputDirectory` must be a fresh, short ASCII path, at most 100 characters. The default is a new `BTM-<timestamp>` folder in the system temporary directory.
+
+The engine version is read from that installation's `Engine/Build/Build.version`. ZIP names and the built descriptor use that version automatically. Bundled .NET layouts used by older and newer UE5 releases are supported. If necessary, select an installed toolset with `-CompilerVersion '14.38.33130'`; installing that toolset is a separate step. The latest MSVC toolset is not always suitable for an older engine.
+
+The plugin includes a guarded non-Clang feature-test fallback for MSVC to handle older engine headers without editing the engine installation. The plugin module compiles without PCH or Unity; the engine's own precompiled build layout is left intact. Binary descriptors use the engine minor-version baseline (for example, 5.5.0 for a 5.5.4 build), while the module manifest retains the real build's Build ID.
+
+To build and test the installed engines in the 5.0-5.8 range:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Build-EngineMatrix.ps1 -OutputDirectory 'C:\UEBuild\BTM-Matrix' -RunTests
+```
+
+The matrix discovers standard Epic installations and Launcher-registered paths. Use `-EngineRoots` for custom locations, `-MinorVersions` for a subset, or `-CompilerVersions` to choose a toolset per engine. It creates separate HostProjects, binaries, tests, and archives for each engine and writes `CompatibilityResults.json`. Missing engines are marked **NotInstalled**, never passed. Add `-RequireAllVersions` to reject missing engines before starting any builds. Neither script downloads engines or changes their source.
+
+To assemble one distribution after building, run `Scripts/New-UnifiedRelease.ps1` with **-BuiltPluginDirectories** containing each completed `HostProject/Plugins/BlueprintTagManager` path and **-OutputZip** naming the destination ZIP. It checks that all profiles were built from the common source, packages the installer and profiles, scans the result, and writes a SHA-256 sidecar. It does not build missing engines.
 
 ## Scope and limits
 

@@ -374,13 +374,13 @@ bool FBlueprintTagViewTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Actor-only tags qualify Blueprint"), FindGroup(TEXT("/Game/ActorOnly.ActorOnly")).IsValid());
     TestTrue(TEXT("Component-only tags qualify Blueprint even with untagged actor"), FindGroup(TEXT("/Game/ComponentOnly.ComponentOnly")).IsValid());
     TestEqual(TEXT("With tags includes tagged targets only, not untagged actor rows"), Matches.Num(), 6);
-    TestTrue(TEXT("Every With tags target has a tag"), !Matches.ContainsByPredicate([](const auto& Row) { return Row->Target.Tags.IsEmpty(); }));
+    TestTrue(TEXT("Every With tags target has a tag"), !Matches.ContainsByPredicate([](const auto& Row) { return (Row->Target.Tags.Num() == 0); }));
     Filter.ComponentPresence = EBlueprintTagPresence::Untagged; Build();
     TestEqual(TEXT("Without tags preserves all Blueprints, even fully empty and fully tagged ones"), Roots.Num(), 7);
     TestEqual(TEXT("Without tags keeps every actor and only untagged components"), Matches.Num(), 10);
     TestTrue(TEXT("Actor rows remain regardless of tags"), Matches.Contains(Rows[0]) && Matches.Contains(Rows[2]) && Matches.Contains(Rows[6]));
     TestTrue(TEXT("No tagged component passes Without tags"), !Matches.ContainsByPredicate([](const auto& Row)
-        { return Row->Target.Kind != EBlueprintTagTargetKind::Actor && !Row->Target.Tags.IsEmpty(); }));
+        { return Row->Target.Kind != EBlueprintTagTargetKind::Actor && (Row->Target.Tags.Num() > 0); }));
     const auto Full = FindGroup(TEXT("/Game/Full.Full"));
     if (TestTrue(TEXT("Fully tagged Blueprint remains visible"), Full.IsValid()))
     {
@@ -686,7 +686,7 @@ bool FBlueprintTagDiscoveryTest::RunTest(const FString& Parameters)
         {
             ++Actors;
             const auto Targets = FBlueprintTagService::Gather(Blueprint);
-            TestTrue(TEXT("Actor tags can be read without opening the asset"), !Targets.IsEmpty() && Targets[0].Tags.Contains(TEXT("DiskTag")));
+            TestTrue(TEXT("Actor tags can be read without opening the asset"), (Targets.Num() > 0) && Targets[0].Tags.Contains(TEXT("DiskTag")));
         }
     }
     TestEqual(TEXT("Non-Actor Blueprint excluded from tag editing"), Actors, 2);

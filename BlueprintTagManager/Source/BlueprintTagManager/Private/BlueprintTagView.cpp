@@ -22,8 +22,8 @@ bool FBlueprintTagFilter::Matches(const FString& AssetPath, const FBlueprintTagT
     if (!bActor && bStaticMeshOnly && !Target.bStaticMeshComponent) { return false; }
     if (!bActor && bExcludeHISM && Target.bHierarchicalInstancedStaticMeshComponent) { return false; }
     if (!bActor && bExcludeISM && Target.bInstancedStaticMeshComponent) { return false; }
-    if (ComponentPresence == EBlueprintTagPresence::Tagged && Target.Tags.IsEmpty()) { return false; }
-    if (!bActor && ComponentPresence == EBlueprintTagPresence::Untagged && !Target.Tags.IsEmpty()) { return false; }
+    if (ComponentPresence == EBlueprintTagPresence::Tagged && (Target.Tags.Num() == 0)) { return false; }
+    if (!bActor && ComponentPresence == EBlueprintTagPresence::Untagged && (Target.Tags.Num() > 0)) { return false; }
     return MatchesTerms(AssetPath, Blueprint) && MatchesTerms(bActor ? FString() : Target.Label, Component)
         && MatchesTerms(FString::JoinBy(Target.Tags, TEXT(" "),
             [](FName TagName) { return TagName.ToString(); }), Tags);
@@ -75,12 +75,12 @@ void FBlueprintTagView::Build(const TArray<TSharedPtr<FBlueprintTagOwnerRow>>& R
         if (bActor)
         {
             ActorTags.Add(Row->AssetPath, FBlueprintTagService::FormatTags(Row->Target.Tags));
-            Group->bActorHasTags = !Row->Target.Tags.IsEmpty();
+            Group->bActorHasTags = (Row->Target.Tags.Num() > 0);
         }
         else
         {
             ++Group->TotalComponents;
-            if (!Row->Target.Tags.IsEmpty()) { ++Group->TaggedComponents; }
+            if ((Row->Target.Tags.Num() > 0)) { ++Group->TaggedComponents; }
         }
         if (Filter.Matches(Row->AssetPath, Row->Target))
         {
@@ -94,7 +94,7 @@ void FBlueprintTagView::Build(const TArray<TSharedPtr<FBlueprintTagOwnerRow>>& R
     }
     Roots.RemoveAll([&Filter](const auto& Group)
     {
-        return Group->Children.IsEmpty()
+        return (Group->Children.Num() == 0)
             || (Filter.ComponentPresence == EBlueprintTagPresence::Tagged && !Group->HasAnyTags());
     });
     for (const auto& Group : Roots)

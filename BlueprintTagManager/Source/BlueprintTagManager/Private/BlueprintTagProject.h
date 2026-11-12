@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BlueprintTagCompilerCompatibility.h"
 #include "CoreMinimal.h"
 #include "AssetRegistry/AssetData.h"
 

@@ -61,12 +61,13 @@ else {
     $taskPaths = @(Get-ChildItem -LiteralPath $RepositoryRoot -File -Recurse -Force | ForEach-Object {
         $_.FullName.Substring($RepositoryRoot.Length + 1).Replace('\', '/')
     } | Where-Object {
-        $_ -match '^(README\.md|LICENSE|\.gitignore|\.gitattributes|Scripts/[^/]+\.ps1|BlueprintTagManager/(BlueprintTagManager\.uplugin|README\.md|VALIDATION\.md|LICENSE|Source/.+|Config/.+))$'
+        $_ -match '^(README\.md|LICENSE|\.gitignore|\.gitattributes|Scripts/[^/]+\.ps1|BlueprintTagManager/(BlueprintTagManager\.uplugin|README\.md|VALIDATION\.md|LICENSE|Source/.+|Config/.+)|Prebuilt/UE5\.[0-8]/BlueprintTagManager/(BlueprintTagManager\.uplugin|Binaries/Win64/(UnrealEditor-BlueprintTagManager\.dll|UnrealEditor\.modules)))$'
     })
 }
 foreach ($taskRelativePath in ($taskPaths | Sort-Object -Unique)) {
     $taskNormalized = $taskRelativePath.Replace('\', '/')
-    if ($taskNormalized -match $taskBlockedPath) { $taskIssues.Add("${taskNormalized}: generated or private file is Git-visible") }
+    $taskDownloadBinary = -not $taskIsRepo -and $taskNormalized -match '^Prebuilt/UE5\.[0-8]/BlueprintTagManager/Binaries/Win64/(UnrealEditor-BlueprintTagManager\.dll|UnrealEditor\.modules)$'
+    if ($taskNormalized -match $taskBlockedPath -and -not $taskDownloadBinary) { $taskIssues.Add("${taskNormalized}: generated or private file is Git-visible") }
     $taskFullPath = Join-Path $RepositoryRoot $taskRelativePath
     if (-not (Test-Path -LiteralPath $taskFullPath -PathType Leaf)) { continue }
     Test-PublicFileBytes $taskNormalized ([System.IO.File]::ReadAllBytes($taskFullPath)) ($taskNormalized -match '\.(dll|exe|pdb|obj|lib)$')
@@ -98,8 +99,8 @@ if ($ArchivePath) {
             $taskEntryName = $taskEntry.FullName.Replace('\', '/')
             if ($taskEntryName.EndsWith('/')) { continue }
             if ($taskEntryName -match '(^/|^[A-Za-z]:|(^|/)\.\.(/|$))') { $taskIssues.Add('Archive contains an unsafe entry name.'); continue }
-            $taskIsDll = $taskEntryName -eq 'BlueprintTagManager/Binaries/Win64/UnrealEditor-BlueprintTagManager.dll'
-            $taskIsModules = $taskEntryName -eq 'BlueprintTagManager/Binaries/Win64/UnrealEditor.modules'
+            $taskIsDll = $taskEntryName -match '^(BlueprintTagManager|Prebuilt/UE5\.[0-8]/BlueprintTagManager)/Binaries/Win64/UnrealEditor-BlueprintTagManager\.dll$'
+            $taskIsModules = $taskEntryName -match '^(BlueprintTagManager|Prebuilt/UE5\.[0-8]/BlueprintTagManager)/Binaries/Win64/UnrealEditor\.modules$'
             if ($taskEntryName -match $taskBlockedPath -and -not $taskIsDll -and -not $taskIsModules) {
                 $taskIssues.Add("Archive ${taskEntryName}: generated or private file must not be distributed")
             }

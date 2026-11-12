@@ -176,7 +176,7 @@ bool FBlueprintTagService::ApplyBatch(const TArray<FBlueprintTagAssetChange>& As
     for (const FBlueprintTagAssetChange& Asset : Assets)
     {
         UBlueprint* Blueprint = Asset.Blueprint.Get();
-        if (!CanEdit(Blueprint) || Asset.Changes.IsEmpty() || SeenAssets.Contains(Blueprint))
+        if (!CanEdit(Blueprint) || (Asset.Changes.Num() == 0) || SeenAssets.Contains(Blueprint))
         {
             OutError = LOCTEXT("Unavailable", "An asset is unavailable, the preview is empty, or Play/Simulate is running. Refresh and preview again.");
             return false;
@@ -201,7 +201,7 @@ bool FBlueprintTagService::ApplyBatch(const TArray<FBlueprintTagAssetChange>& As
             Resolved.Add({ Blueprint, *Target, Change, nullptr, Depth });
         }
     }
-    if (Resolved.IsEmpty())
+    if ((Resolved.Num() == 0))
     {
         OutError = LOCTEXT("EmptyBatch", "Preview a change before applying it.");
         return false;

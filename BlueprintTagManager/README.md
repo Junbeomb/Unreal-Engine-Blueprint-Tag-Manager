@@ -1,18 +1,30 @@
-# Blueprint Tag Manager 1.0.3
+# Blueprint Tag Manager 1.0.4
 
-An Unreal Engine 5.7 editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. Blueprints do not need to be opened individually.
+An Unreal Engine editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. The source targets **UE 5.0 through 5.8**. Blueprints do not need to be opened individually.
 
-Windows x64 is supported. Testing used the Epic Games Launcher build of Unreal Engine 5.7.4; other patches and custom engine builds may require rebuilding. macOS and Linux are not supported. See [VALIDATION.md](VALIDATION.md) for the test scope and results.
+Windows x64 is supported. See [VALIDATION.md](VALIDATION.md) for actual build and test results by engine version, including untested versions. Prebuilt DLLs are specific to an engine version; other patches and custom engine builds may require rebuilding. macOS and Linux are not supported.
+
+Verified engine builds are **5.3.2**, **5.5.4**, and **5.7.4**. Other versions in the 5.0-5.8 source target range have not been executed or verified.
 
 ## Installation
 
-1. Close Unreal Editor and extract `BlueprintTagManager-1.0.3-UE5.7-Win64.zip`.
-2. Copy the **BlueprintTagManager** folder into `<YourProject>/Plugins/`. When replacing an existing installation, replace the plugin folder with the release version.
-3. Confirm that the descriptor is at `<YourProject>/Plugins/BlueprintTagManager/BlueprintTagManager.uplugin`.
-4. Enable **Edit > Plugins > Blueprint Tag Manager** and restart the editor.
-5. Open **Tools > Blueprint Tag Manager**, **Window > Blueprint Tag Manager**, or the main toolbar's **Blueprint Tags** button.
+1. Download **BlueprintTagManager-1.0.4-UE5.0-5.8-Win64.zip**, extract it, and close your project's Unreal Editor.
+2. From the extracted folder, run the installer with your project file and engine installation:
 
-Use the separately published release ZIP for prebuilt binaries. GitHub's **Code > Download ZIP** and automatic **Source code (zip)** downloads contain source only. Source builds require a supported compiler and SDK.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Install-BlueprintTagManager.ps1 -ProjectFile 'D:\Projects\MyGame\MyGame.uproject' -EngineRoot 'C:\Program Files\Epic Games\UE_5.3'
+```
+
+3. The installer creates `<YourProject>/Plugins/BlueprintTagManager/BlueprintTagManager.uplugin`. Enable **Edit > Plugins > Blueprint Tag Manager** and restart if requested.
+4. Open **Tools > Blueprint Tag Manager**, **Window > Blueprint Tag Manager**, or the main toolbar's **Blueprint Tags** button.
+
+The single ZIP combines common source with **Prebuilt/UE5.3**, **Prebuilt/UE5.5**, and **Prebuilt/UE5.7** profiles. A matching engine Build ID uses its bundled DLL without compiling. Other versions in the 5.0-5.8 range, custom builds, and different Build IDs build from source using the selected engine. **Source fallback requires a compatible MSVC compiler and Windows SDK.** The six versions outside 5.3, 5.5, and 5.7 are unverified source targets. The installer does not download engines or compilers, edit the project file, or force incompatible DLLs to load.
+
+Add **-Replace** when upgrading. It backs up the existing plugin to `<YourProject>/Saved/BlueprintTagManager/Backups/<timestamp>/BlueprintTagManager` before installing. Without this option, existing installations are refused. Keep the editor closed during upgrades.
+
+Use **-BuildFromSource** to bypass profiles. **-CompilerVersion '14.38.33130'** selects an installed toolset when compiling; **-BuildOutputDirectory** selects a fresh, short ASCII build path. The common BlueprintTagManager folder alone contains source, not a prebuilt DLL; use the installer to merge in the correct profile.
+
+GitHub's **Code > Download ZIP** and automatic **Source code (zip)** downloads do not include Prebuilt profiles. Their installer builds source instead. Keep Scripts beside BlueprintTagManager. Alternatively, run Build-BlueprintTagManager.ps1 as described in the repository README, then copy its completed plugin folder into your project. The common descriptor omits a single EngineVersion pin; each built descriptor and module manifest records its own engine compatibility.
 
 ## Scanning and browsing
 
@@ -99,7 +111,7 @@ Apply does not save assets. Use **Compile changed**, then **Save changed...** to
 
 ## Building from source
 
-Install Unreal Engine 5.7 and Visual Studio 2022 with **Game development with C++**, a supported MSVC toolset, and Windows SDK. Keep `Scripts` beside the plugin folder and run from the repository or extracted release root:
+Install your chosen Unreal Engine version from **5.0 through 5.8** and Visual Studio with **Game development with C++**, an MSVC toolset supported by that engine, and Windows SDK. Keep `Scripts` beside the plugin folder and run from the repository or extracted source root:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Build-BlueprintTagManager.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.7' -RunTests
@@ -107,7 +119,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Build-BlueprintTag
 
 Set `-EngineRoot` to your engine installation. The script uses the engine's bundled .NET runtime and creates a separate HostProject. It prints the built plugin and checked release ZIP paths. An explicit `-OutputDirectory` must be a new, short ASCII path of at most 100 characters. The default is a new temporary directory.
 
-The build records diagnostic source paths relatively. The public ZIP includes the DLL, module manifest, source, configuration, documentation, scripts, and MIT license. Logs, PDBs, caches, HostProject, and Intermediate are excluded.
+The script reads the selected engine's Build.version and detects its bundled .NET layout. Archive names and the generated descriptor use the actual build engine. Select an installed compiler when needed with `-CompilerVersion '14.38.33130'`. Older engines may need an older MSVC toolset even when the newest Visual Studio is installed.
+
+To build all installed versions in the target range, run `Scripts/Build-EngineMatrix.ps1 -RunTests` with a fresh, short ASCII `-OutputDirectory`. It discovers standard Epic and Launcher installations; `-EngineRoots` accepts custom paths, `-MinorVersions` selects minor versions, and `-CompilerVersions` accepts a per-engine hashtable. Each engine gets its own HostProject and archive. `CompatibilityResults.json` records **Built / Failed / NotInstalled** and whether tests ran. `-RequireAllVersions` rejects missing engines before building. Missing installations are never marked as verified.
+
+The build records diagnostic source paths relatively. The unified release puts the matching DLLs and module manifests in separate Prebuilt profiles beside the common source. It includes configuration, English documentation, scripts, and the MIT license. Logs, PDBs, caches, HostProject, and Intermediate are excluded. Build scripts do not download engines or modify their source.
 
 ## Feedback and contributions
 

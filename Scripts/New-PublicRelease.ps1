@@ -1,12 +1,17 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$BuiltPluginDirectory,
+    [string]$BuiltPluginDirectory,
     [Parameter(Mandatory = $true)][string]$OutputZip,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$SourceOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+if (-not $BuiltPluginDirectory) {
+    if (-not $SourceOnly) { throw 'Specify BuiltPluginDirectory for a binary release, or use -SourceOnly.' }
+    $BuiltPluginDirectory = Join-Path $taskRoot 'BlueprintTagManager'
+}
 $BuiltPluginDirectory = (Resolve-Path -LiteralPath $BuiltPluginDirectory).ProviderPath
 $OutputZip = [System.IO.Path]::GetFullPath($OutputZip)
 if ((Test-Path -LiteralPath $OutputZip) -and -not $Force) { throw "Output already exists: $OutputZip. Use a new path or -Force." }
@@ -16,16 +21,29 @@ New-Item -ItemType Directory -Path $taskPluginStage | Out-Null
 
 # Explicit allowlist: do not package the HostProject, PDBs, logs, or build intermediates.
 Copy-Item -LiteralPath (Join-Path $BuiltPluginDirectory 'BlueprintTagManager.uplugin') -Destination $taskPluginStage
+$taskDescriptorFile = Join-Path $taskPluginStage 'BlueprintTagManager.uplugin'
+$taskDescriptor = Get-Content -LiteralPath $taskDescriptorFile -Raw | ConvertFrom-Json
+if ($SourceOnly) {
+    if ($taskDescriptor.PSObject.Properties['EngineVersion']) {
+        $taskDescriptor.PSObject.Properties.Remove('EngineVersion')
+        [System.IO.File]::WriteAllText($taskDescriptorFile, ($taskDescriptor | ConvertTo-Json -Depth 12))
+    }
+}
+elseif (-not $taskDescriptor.EngineVersion) {
+    throw 'Binary releases must record their build engine. Run Build-BlueprintTagManager.ps1 first.'
+}
 foreach ($taskFolder in @('Source', 'Config')) {
     $taskSourceFolder = Join-Path $BuiltPluginDirectory $taskFolder
     $taskLinks = @(Get-ChildItem -LiteralPath $taskSourceFolder -Recurse -Force | Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint })
     if ($taskLinks.Count -gt 0) { throw 'Release source contains a reparse point.' }
     Copy-Item -LiteralPath $taskSourceFolder -Destination $taskPluginStage -Recurse
 }
-$taskBinaryStage = Join-Path $taskPluginStage 'Binaries\Win64'
-New-Item -ItemType Directory -Path $taskBinaryStage | Out-Null
-foreach ($taskBinary in @('UnrealEditor-BlueprintTagManager.dll', 'UnrealEditor.modules')) {
-    Copy-Item -LiteralPath (Join-Path $BuiltPluginDirectory ('Binaries\Win64\' + $taskBinary)) -Destination $taskBinaryStage
+if (-not $SourceOnly) {
+    $taskBinaryStage = Join-Path $taskPluginStage 'Binaries\Win64'
+    New-Item -ItemType Directory -Path $taskBinaryStage | Out-Null
+    foreach ($taskBinary in @('UnrealEditor-BlueprintTagManager.dll', 'UnrealEditor.modules')) {
+        Copy-Item -LiteralPath (Join-Path $BuiltPluginDirectory ('Binaries\Win64\' + $taskBinary)) -Destination $taskBinaryStage
+    }
 }
 foreach ($taskDoc in @('README.md', 'VALIDATION.md', 'LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot ('BlueprintTagManager\' + $taskDoc)) -Destination $taskPluginStage
