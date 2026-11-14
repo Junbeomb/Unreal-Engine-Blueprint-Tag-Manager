@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.5
+# Blueprint Tag Manager 1.0.6
 
 An Unreal Engine editor plugin for managing **Actor Tags** and **Component Tags** across project Actor Blueprints from the main editor. The source targets **UE 5.0 through 5.8**. Blueprints do not need to be opened individually.
 
@@ -8,7 +8,7 @@ Verified engine builds are **5.3.2**, **5.5.4**, and **5.7.4**. Other versions i
 
 ## Installation
 
-1. Download **BlueprintTagManager-1.0.5-UE5.0-5.8-Win64.zip**, extract it, and close your project's Unreal Editor.
+1. Download **BlueprintTagManager-1.0.6-UE5.0-5.8-Win64.zip**, extract it, and close your project's Unreal Editor.
 2. From the extracted folder, run the installer with your project file and engine installation:
 
 ```powershell
@@ -32,6 +32,7 @@ GitHub's **Code > Download ZIP** and automatic **Source code (zip)** downloads d
 - Saved assets are loaded into memory to read their defaults, without opening their Blueprint editors. Loaded Blueprints are retained while the panel uses them. Large projects can take time to scan.
 - Progress shows assets read, Actor Blueprints found, target count, skipped non-Actor assets, and failures. Hover over the progress text for failed asset paths.
 - **Cancel scan** keeps partial results and labels them **Canceled: partial results**. An individual asset load must finish before cancellation takes effect.
+- **Recent folders** keeps up to five unique content folder paths, newest first. Press **Enter** in Content folder or start **Scan project** with a valid scope to remember a valid path. Reusing a path moves it to the front. Click its button to fill the input without scanning; click the adjacent **X** to remove it. Removing history leaves the input unchanged. Blank scope and invalid/out-of-project paths are not recorded. History is stored in local per-project editor user settings under Saved/Config and is excluded from Git and releases.
 - Each Blueprint starts collapsed. Its overview summarizes Actor Tags, the union of tags on matching components, and matching/total component counts. **Components (shown)** follows the current type, exclusion, search, and tag-presence filters, including matching children inside collapsed groups. Tags belonging only to excluded components are omitted. Total component counts and **All targets have tags** still describe the whole Blueprint.
 - Click the **Blueprint name or arrow** to expand or collapse it. The separate **Open Blueprint** button opens the asset. Hover over the name for its full path. **Expand all / Collapse all** changes the presentation only.
 - **Actor Tags** appear as a separate row with bold text and the normal text color and background. This row edits actor defaults, independently of component tags.
@@ -39,7 +40,9 @@ GitHub's **Code > Download ZIP** and automatic **Source code (zip)** downloads d
 
 ## Layout and resizing
 
-Labeled sections separate **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview**. Drag the dividers between the main rows to change their heights. Drag dividers between side-by-side sections to adjust the scan/search/filter widths, the inventory/batch-edit widths, and the two batch-operation groups. Drag table header dividers to adjust column widths. The type-filter toggles and **Apply preview** keep their content-sized width instead of stretching across the section.
+Labeled sections separate **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview**. The four main rows start at approximately **16% / 47% / 21% / 16%** from top to bottom; the scan/search/filter and inventory/batch-edit rows are shorter, and the results list is taller. Horizontal proportions are unchanged. Drag row, section, and table-header dividers to adjust their sizes. The type-filter toggles and **Apply preview** keep content-sized widths.
+
+Above the list, **Selection** groups Check matches, Uncheck matches, and the checked/matching counts. **Blueprints with checks** reports selected assets. **List controls** separately groups Refresh tags, Expand all, and Collapse all.
 
 Control sections can be scrolled after being reduced in size. Layout adjustments remain for the current panel session.
 
@@ -76,7 +79,7 @@ Type and text filters also apply. A Blueprint whose actor and every component ha
 
 ## Thumbnails
 
-The **Thumbnails** controls above the list are separate from tag searches and filters:
+The **Thumbnails** controls have their own heading above the list, separate from selection and list actions. **Show** groups the visibility switches, and **Image size** groups the three size choices:
 
 | Control | Behavior |
 | --- | --- |

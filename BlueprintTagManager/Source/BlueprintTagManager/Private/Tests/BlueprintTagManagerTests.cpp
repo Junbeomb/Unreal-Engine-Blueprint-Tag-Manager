@@ -28,6 +28,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/PackageName.h"
@@ -38,6 +39,7 @@
 #include "UObject/SavePackage.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SWindow.h"
+#include "Widgets/Input/SEditableTextBox.h"
 
 namespace BlueprintTagManagerTests
 {
@@ -736,6 +738,103 @@ bool FBlueprintTagThumbnailTest::RunTest(const FString& Parameters)
         Package->SetDirtyFlag(false);
         return true;
     }));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBlueprintTagRecentFoldersTest, "BlueprintTagManager.RecentFolders",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBlueprintTagRecentFoldersTest::RunTest(const FString& Parameters)
+{
+    const FString Settings = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(),
+        TEXT("Automation/BTM-History-") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".ini")));
+    FBlueprintTagRecentFolders History;
+    History.Load(Settings);
+    GConfig->SetString(TEXT("UnrelatedSection"), TEXT("Keep"), TEXT("Preserved"), Settings);
+    TestEqual(TEXT("A new history is empty"), History.GetPaths().Num(), 0);
+    for (const TCHAR* Path : { TEXT("/Game/A"), TEXT("/Game/B"), TEXT("/Game/C"), TEXT("/Game/D"), TEXT("/Game/E"), TEXT("/Game/F") })
+    { TestTrue(TEXT("Remember a valid content folder"), History.Remember(Path)); }
+    TestTrue(TEXT("Keep five unique paths, newest first"), History.GetPaths() == TArray<FString>({TEXT("/Game/F"), TEXT("/Game/E"), TEXT("/Game/D"), TEXT("/Game/C"), TEXT("/Game/B")}));
+    TestTrue(TEXT("Reusing a folder moves it to the front"), History.Remember(TEXT(" /Game/D/ ")));
+    TestTrue(TEXT("Whitespace and trailing slash are normalized"), History.GetPaths() == TArray<FString>({TEXT("/Game/D"), TEXT("/Game/F"), TEXT("/Game/E"), TEXT("/Game/C"), TEXT("/Game/B")}));
+    TestFalse(TEXT("Case-insensitive duplicates do not create a sixth entry"), History.Remember(TEXT("/game/d")));
+    const auto BeforeInvalid = History.GetPaths();
+    for (const TCHAR* Invalid : { TEXT(""), TEXT(" "), TEXT("/"), TEXT("/Engine"), TEXT("/GameExtra/A"), TEXT("/Game/../Private"), TEXT("/Game/Bad Folder") })
+    { TestFalse(TEXT("Invalid or out-of-scope paths are not stored"), History.Remember(Invalid)); }
+    TestFalse(TEXT("Filesystem paths are not stored"), History.Remember(FPaths::ConvertRelativePathToFull(TEXT("Content"))));
+    TestTrue(TEXT("Rejected paths leave history unchanged"), History.GetPaths() == BeforeInvalid);
+    GConfig->UnloadFile(Settings);
+    FBlueprintTagRecentFolders Reloaded;
+    Reloaded.Load(Settings);
+    TestTrue(TEXT("History survives reloading from disk"), Reloaded.GetPaths() == BeforeInvalid);
+    FString Kept;
+    TestTrue(TEXT("Other editor settings are preserved"), GConfig->GetString(TEXT("UnrelatedSection"), TEXT("Keep"), Kept, Settings) && Kept == TEXT("Preserved"));
+    TestTrue(TEXT("Removing a recent path succeeds"), Reloaded.Remove(TEXT("/Game/D")));
+    TestFalse(TEXT("Removing an absent path is a no-op"), Reloaded.Remove(TEXT("/Game/Missing")));
+    GConfig->UnloadFile(Settings);
+    FBlueprintTagRecentFolders AfterRemoval;
+    AfterRemoval.Load(Settings);
+    TestEqual(TEXT("Removal persists to disk"), AfterRemoval.GetPaths().Num(), 4);
+    TestFalse(TEXT("Removed path stays absent"), AfterRemoval.GetPaths().Contains(TEXT("/Game/D")));
+
+    const FString OtherSettings = Settings + TEXT(".other.ini");
+    FBlueprintTagRecentFolders Other;
+    Other.Load(OtherSettings);
+    Other.Remember(TEXT("/Game/OtherProject"));
+    AfterRemoval.Load(Settings);
+    TestEqual(TEXT("Separate settings files do not share history"), AfterRemoval.GetPaths().Num(), 4);
+    GConfig->SetArray(TEXT("BlueprintTagManager.RecentFolders"), TEXT("Paths"),
+        {TEXT("/Game/A"), TEXT(" /Game/A/ "), TEXT("/Engine"), TEXT("/Game/B"), TEXT("/Game/C"), TEXT("/Game/D"), TEXT("/Game/E"), TEXT("/Game/F")}, OtherSettings);
+    GConfig->Flush(false, OtherSettings);
+    Other.Load(OtherSettings);
+    TestTrue(TEXT("Loading sanitizes duplicates, invalid paths, and oversized history"), Other.GetPaths() == TArray<FString>({TEXT("/Game/A"), TEXT("/Game/B"), TEXT("/Game/C"), TEXT("/Game/D"), TEXT("/Game/E")}));
+
+    const auto Widget = SNew(SBlueprintTagManager).RecentFoldersConfig(Settings);
+    TestEqual(TEXT("Panel restores local folder history"), Widget->RecentFolderHistory.GetPaths().Num(), 4);
+    Widget->UseRecentFolder(TEXT("/Game/F"));
+    TestEqual(TEXT("Recent button fills Content folder"), Widget->FolderInput->GetText().ToString(), FString(TEXT("/Game/F")));
+    TestFalse(TEXT("Using a recent folder does not request a scan"), Widget->IsScanInProgress());
+    TestEqual(TEXT("Using a recent folder does not load Blueprints"), Widget->GetBlueprintCount(), 0);
+    Widget->RemoveRecentFolder(TEXT("/Game/F"));
+    TestEqual(TEXT("X removes a path from the panel"), Widget->RecentFolderHistory.GetPaths().Num(), 3);
+    TestEqual(TEXT("Removing history does not clear the current input"), Widget->FolderInput->GetText().ToString(), FString(TEXT("/Game/F")));
+    Widget->OnFolderCommitted(FText::FromString(TEXT("/Game/Partial")), ETextCommit::OnUserMovedFocus);
+    TestEqual(TEXT("Focus changes do not save partial typing"), Widget->RecentFolderHistory.GetPaths().Num(), 3);
+    Widget->FolderInput->SetText(FText::FromString(TEXT("/Game/Characters")));
+    Widget->OnFolderCommitted(Widget->FolderInput->GetText(), ETextCommit::OnEnter);
+    TestEqual(TEXT("Enter remembers a path without scanning"), Widget->RecentFolderHistory.GetPaths()[0], FString(TEXT("/Game/Characters")));
+    TestFalse(TEXT("Enter remains independent of Scan project"), Widget->IsScanInProgress());
+    const auto Reopened = SNew(SBlueprintTagManager).RecentFoldersConfig(Settings);
+    TestTrue(TEXT("New panels restore the same recent paths"), Reopened->RecentFolderHistory.GetPaths() == Widget->RecentFolderHistory.GetPaths());
+
+    // Populate a compact, readable fixture for visual review of the new layout.
+    for (const FString& Path : TArray<FString>(Widget->RecentFolderHistory.GetPaths())) { Widget->RemoveRecentFolder(Path); }
+    for (const TCHAR* Path : { TEXT("/Game/Props"), TEXT("/Game/Weapons"), TEXT("/Game/Environment"), TEXT("/Game/Characters"), TEXT("/Game") })
+    { Widget->RememberFolder(Path); }
+    Widget->UseRecentFolder(TEXT("/Game/Characters"));
+    if (FParse::Param(FCommandLine::Get(), TEXT("BTMCaptureUI")))
+    {
+        const auto Window = SNew(SWindow).Title(FText::FromString(TEXT("Blueprint Tag Manager"))).ClientSize(FVector2D(2554, 1386))
+            .SupportsMaximize(false).SupportsMinimize(false)[ Widget ];
+        FSlateApplication::Get().AddWindow(Window);
+        // The initial window creation can be clamped to the offscreen desktop.
+        Window->Resize(FVector2D(2554, 1386));
+        auto Capture = [this, Widget](const TCHAR* Filename)
+        {
+            Widget->SlatePrepass();
+            TArray<FColor> Pixels; FIntVector Size;
+            if (TestTrue(TEXT("Capture recent folder controls"), FSlateApplication::Get().TakeScreenshot(Widget, Pixels, Size)))
+            {
+                TArray64<uint8> PNG;
+                FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, PNG);
+                TestTrue(TEXT("Save recent folder capture"), FFileHelper::SaveArrayToFile(PNG, *FPaths::Combine(FPaths::ProjectSavedDir(), Filename)));
+            }
+        };
+        ADD_LATENT_AUTOMATION_COMMAND(FDelayedFunctionLatentCommand([Capture]() { Capture(TEXT("BlueprintTagManager-RecentFolders.png")); }, 0.25f));
+        ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([Widget]() { Widget->RemoveRecentFolder(TEXT("/Game/Characters")); return true; }));
+        ADD_LATENT_AUTOMATION_COMMAND(FDelayedFunctionLatentCommand([Capture]() { Capture(TEXT("BlueprintTagManager-RecentFolders-Removed.png")); }, 0.25f));
+        ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([Window]() { Window->RequestDestroyWindow(); return true; }));
+    }
     return true;
 }
 

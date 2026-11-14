@@ -10,6 +10,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/ScopedSlowTask.h"
 #include "Misc/PackageName.h"
+#include "Misc/ConfigCacheIni.h"
 #include "BlueprintTagCompatibility.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "UObject/UnrealType.h"
@@ -33,6 +34,7 @@
 
 void SBlueprintTagManager::Construct(const FArguments& InArgs)
 {
+    RecentFolderHistory.Load(InArgs._RecentFoldersConfig.IsEmpty() ? GEditorPerProjectIni : InArgs._RecentFoldersConfig);
     ExcludeToggleStyle = FBlueprintTagStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox");
     ExcludeToggleStyle.CheckedImage.TintColor = FLinearColor(0.55f, 0.055f, 0.045f);
     ExcludeToggleStyle.CheckedHoveredImage.TintColor = FLinearColor(0.7f, 0.085f, 0.065f);
@@ -137,6 +139,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
             [ SAssignNew(FolderInput, SEditableTextBox)
                 .HintText(LOCTEXT("Folder", "Blank = all project content; e.g. /Game/Characters"))
+                .OnTextCommitted(this, &SBlueprintTagManager::OnFolderCommitted)
                 .IsEnabled_Lambda([this]() { return CanWork() && !IsScanInProgress(); }) ]
             + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
             [
@@ -152,6 +155,11 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             + SVerticalBox::Slot().AutoHeight()
             [ SNew(STextBlock).AutoWrapText(true).Text(this, &SBlueprintTagManager::GetScanText)
                 .ToolTipText_Lambda([this]() { return FText::FromString(ScanFailures); }) ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 7, 0, 3)
+            [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("RecentFolders", "Recent folders"))
+                .ToolTipText(LOCTEXT("RecentFoldersHelp", "The five most recent folders confirmed with Enter or Scan project. Click a path to fill Content folder; click X to remove it. History is saved locally for this project.")) ]
+            + SVerticalBox::Slot().AutoHeight()
+            [ SAssignNew(RecentFoldersBox, SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(4, 4)) ]
         ]);
 
     const auto SearchPanel = Section(LOCTEXT("SearchHeading", "Search"),
@@ -211,37 +219,65 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
         SNew(SVerticalBox)
         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
         [
-            SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(5, 4))
-            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("All", "Check matches")).IsEnabled_Lambda([this]() { return CanEditResults(); }).OnClicked(this, &SBlueprintTagManager::CheckMatches, true) ]
-            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("None", "Uncheck matches")).IsEnabled_Lambda([this]() { return CanEditResults(); }).OnClicked(this, &SBlueprintTagManager::CheckMatches, false) ]
-            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("Refresh", "Refresh tags")).IsEnabled_Lambda([this]() { return CanEditResults(); })
-                .OnClicked_Lambda([this]() { RefreshRows(); return FReply::Handled(); }) ]
-            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("ExpandAll", "Expand all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, true) ]
-            + SWrapBox::Slot()[ SNew(SButton).Text(LOCTEXT("CollapseAll", "Collapse all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, false) ]
+            SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(8, 4))
+            + SWrapBox::Slot()
+            [
+                SNew(SBorder).BorderImage(FBlueprintTagStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6)
+                [ SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+                    [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("SelectionHeading", "Selection")) ]
+                    + SVerticalBox::Slot().AutoHeight()
+                    [ SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)[ SNew(SButton).Text(LOCTEXT("All", "Check matches")).IsEnabled_Lambda([this]() { return CanEditResults(); }).OnClicked(this, &SBlueprintTagManager::CheckMatches, true) ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)[ SNew(SButton).Text(LOCTEXT("None", "Uncheck matches")).IsEnabled_Lambda([this]() { return CanEditResults(); }).OnClicked(this, &SBlueprintTagManager::CheckMatches, false) ]
+                        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5, 0, 0, 0)
+                        [ SNew(STextBlock).Text(this, &SBlueprintTagManager::GetSelectionText)
+                            .ToolTipText(LOCTEXT("SelectionHelp", "Counts cover checked editable targets matching the current filters, including collapsed children. Blueprints with checks counts selected assets, not every listed Blueprint.")) ] ]
+                ]
+            ]
+            + SWrapBox::Slot()
+            [
+                SNew(SBorder).BorderImage(FBlueprintTagStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6)
+                [ SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+                    [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("ListControls", "List controls")) ]
+                    + SVerticalBox::Slot().AutoHeight()
+                    [ SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)[ SNew(SButton).Text(LOCTEXT("Refresh", "Refresh tags")).IsEnabled_Lambda([this]() { return CanEditResults(); })
+                            .OnClicked_Lambda([this]() { RefreshRows(); return FReply::Handled(); }) ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)[ SNew(SButton).Text(LOCTEXT("ExpandAll", "Expand all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, true) ]
+                        + SHorizontalBox::Slot().AutoWidth()[ SNew(SButton).Text(LOCTEXT("CollapseAll", "Collapse all")).OnClicked(this, &SBlueprintTagManager::ExpandGroups, false) ] ]
+                ]
+            ]
         ]
-        + SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 4)
-        [ SNew(SSeparator) ]
         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 5)
         [
-            SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6, 4))
-            + SWrapBox::Slot().VAlign(VAlign_Center)
-            [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Thumbnails", "Thumbnails")) ]
-            + SWrapBox::Slot()
-            [ ThumbnailToggle(LOCTEXT("BlueprintThumbnails", "Blueprints"),
-                LOCTEXT("BlueprintThumbnailHelp", "Show each Blueprint asset's thumbnail on its group row. Off by default; independent of component thumbnails."),
-                &FBlueprintTagThumbnailOptions::bBlueprints) ]
-            + SWrapBox::Slot()
-            [ ThumbnailToggle(LOCTEXT("MeshThumbnails", "Static Mesh components"),
-                LOCTEXT("MeshThumbnailHelp", "Show the assigned Static Mesh asset's thumbnail on component rows, including ISM and HISM. Unassigned meshes and non-StaticMesh components show No image. Off by default."),
-                &FBlueprintTagThumbnailOptions::bStaticMeshComponents) ]
-            + SWrapBox::Slot().VAlign(VAlign_Center).Padding(FMargin(6, 0, 0, 0))
-            [ SNew(STextBlock).Text(LOCTEXT("ThumbnailSize", "Size")) ]
-            + SWrapBox::Slot()[ ThumbnailSizeButton(16) ]
-            + SWrapBox::Slot()[ ThumbnailSizeButton(32) ]
-            + SWrapBox::Slot()[ ThumbnailSizeButton(64) ]
+            SNew(SBorder).BorderImage(FBlueprintTagStyle::GetBrush("ToolPanel.DarkGroupBorder")).Padding(6)
+            [ SNew(SVerticalBox)
+                + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
+                [ SNew(STextBlock).Font(FBlueprintTagStyle::GetFontStyle("BoldFont")).Text(LOCTEXT("Thumbnails", "Thumbnails")) ]
+                + SVerticalBox::Slot().AutoHeight()
+                [ SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(14, 4))
+                    + SWrapBox::Slot()
+                    [ SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 5, 0)[ SNew(STextBlock).Text(LOCTEXT("ThumbnailShow", "Show:")) ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)
+                        [ ThumbnailToggle(LOCTEXT("BlueprintThumbnails", "Blueprints"),
+                            LOCTEXT("BlueprintThumbnailHelp", "Show each Blueprint asset's thumbnail on its group row. Off by default; independent of component thumbnails."),
+                            &FBlueprintTagThumbnailOptions::bBlueprints) ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [ ThumbnailToggle(LOCTEXT("MeshThumbnails", "Static Mesh components"),
+                            LOCTEXT("MeshThumbnailHelp", "Show the assigned Static Mesh asset's thumbnail on component rows, including ISM and HISM. Unassigned meshes and non-StaticMesh components show No image. Off by default."),
+                            &FBlueprintTagThumbnailOptions::bStaticMeshComponents) ] ]
+                    + SWrapBox::Slot()
+                    [ SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 10, 0)[ SNew(SSeparator).Orientation(Orient_Vertical) ]
+                        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 5, 0)[ SNew(STextBlock).Text(LOCTEXT("ThumbnailSize", "Image size:")) ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)[ ThumbnailSizeButton(16) ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)[ ThumbnailSizeButton(32) ]
+                        + SHorizontalBox::Slot().AutoWidth()[ ThumbnailSizeButton(64) ] ] ]
+            ]
         ]
-        + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
-        [ SNew(STextBlock).AutoWrapText(true).Text(this, &SBlueprintTagManager::GetSelectionText) ]
         + SVerticalBox::Slot().FillHeight(1)
         [
             SAssignNew(OwnerTree, STreeView<TSharedPtr<FBlueprintTagOwnerRow>>).TreeItemsSource(&Groups)
@@ -345,15 +381,15 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             + SVerticalBox::Slot().FillHeight(1)
             [
                 SNew(SSplitter).Orientation(Orient_Vertical).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
-                + SSplitter::Slot().Value(0.26f).MinSize(64)
+                + SSplitter::Slot().Value(0.16f).MinSize(64)
                 [
                     SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
                     + SSplitter::Slot().Value(0.34f).MinSize(140)[ ScanPanel ]
                     + SSplitter::Slot().Value(0.33f).MinSize(140)[ SearchPanel ]
                     + SSplitter::Slot().Value(0.33f).MinSize(140)[ FilterPanel ]
                 ]
-                + SSplitter::Slot().Value(0.30f).MinSize(100)[ BlueprintPanel ]
-                + SSplitter::Slot().Value(0.28f).MinSize(80)
+                + SSplitter::Slot().Value(0.47f).MinSize(100)[ BlueprintPanel ]
+                + SSplitter::Slot().Value(0.21f).MinSize(80)
                 [
                     SNew(SSplitter).PhysicalSplitterHandleSize(6).HitDetectionSplitterHandleSize(10)
                     + SSplitter::Slot().Value(0.3f).MinSize(140)[ InventoryPanel ]
@@ -377,6 +413,7 @@ void SBlueprintTagManager::Construct(const FArguments& InArgs)
             ]
         ]
     ];
+    RebuildRecentFolders();
     InvalidatePreview();
 }
 
@@ -387,6 +424,57 @@ SBlueprintTagManager::~SBlueprintTagManager()
 }
 
 bool SBlueprintTagManager::CanWork() const { return GEditor && !GEditor->PlayWorld; }
+
+void SBlueprintTagManager::OnFolderCommitted(const FText& Text, ETextCommit::Type CommitType)
+{
+    if (CommitType == ETextCommit::OnEnter && CanWork() && !IsScanInProgress()) { RememberFolder(Text.ToString()); }
+}
+
+void SBlueprintTagManager::RememberFolder(const FString& Folder)
+{
+    if (RecentFolderHistory.Remember(Folder)) { RebuildRecentFolders(); }
+}
+
+FReply SBlueprintTagManager::UseRecentFolder(FString Folder)
+{
+    if (CanWork() && !IsScanInProgress() && FolderInput) { FolderInput->SetText(FText::FromString(Folder)); }
+    return FReply::Handled();
+}
+
+FReply SBlueprintTagManager::RemoveRecentFolder(FString Folder)
+{
+    if (CanWork() && !IsScanInProgress() && RecentFolderHistory.Remove(Folder)) { RebuildRecentFolders(); }
+    return FReply::Handled();
+}
+
+void SBlueprintTagManager::RebuildRecentFolders()
+{
+    if (!RecentFoldersBox) { return; }
+    RecentFoldersBox->ClearChildren();
+    if (RecentFolderHistory.GetPaths().Num() == 0)
+    {
+        RecentFoldersBox->AddSlot()[ SNew(STextBlock).Text(LOCTEXT("NoRecentFolders", "No recent folders."))
+            .ColorAndOpacity(FSlateColor::UseSubduedForeground()) ];
+    }
+    for (const FString& Folder : RecentFolderHistory.GetPaths())
+    {
+        RecentFoldersBox->AddSlot()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().AutoWidth()
+            [ SNew(SButton).OnClicked(this, &SBlueprintTagManager::UseRecentFolder, Folder)
+                .IsEnabled_Lambda([this]() { return CanWork() && !IsScanInProgress(); })
+                .ToolTipText(FText::FromString(Folder))
+                [ SNew(SBox).MaxDesiredWidth(240).Clipping(EWidgetClipping::ClipToBounds)
+                    [ SNew(STextBlock).Text(FText::FromString(Folder)) ] ] ]
+            + SHorizontalBox::Slot().AutoWidth()
+            [ SNew(SButton).Text(LOCTEXT("RemoveRecentFolder", "X"))
+                .OnClicked(this, &SBlueprintTagManager::RemoveRecentFolder, Folder)
+                .IsEnabled_Lambda([this]() { return CanWork() && !IsScanInProgress(); })
+                .ToolTipText(FText::Format(LOCTEXT("RemoveRecentFolderHelp", "Remove {0} from recent folders."), FText::FromString(Folder))) ]
+        ];
+    }
+}
 void SBlueprintTagManager::QueueRefresh() { if (bHasScanned) { bRefreshRequested = true; } }
 void SBlueprintTagManager::PostUndo(bool) { QueueRefresh(); }
 void SBlueprintTagManager::PostRedo(bool) { QueueRefresh(); }
@@ -423,6 +511,7 @@ void SBlueprintTagManager::BeginScan()
     FText Error;
     TArray<FAssetData> Assets;
     if (!FBlueprintTagProject::Discover(FolderInput->GetText().ToString(), Assets, Error)) { Status = Error; return; }
+    RememberFolder(FolderInput->GetText().ToString());
     bHasScanned = true;
     ScanChecks.Reset();
     for (const auto& Row : Rows) { ScanChecks.Add(Row->Key(), Row->bChecked); }
@@ -596,7 +685,7 @@ FText SBlueprintTagManager::GetSelectionText() const
     int32 Count = 0;
     TSet<FString> Assets;
     for (const auto& Row : MatchingRows) { if (Row->bChecked && Row->Target.bEditable) { ++Count; Assets.Add(Row->AssetPath); } }
-    return FText::Format(LOCTEXT("Selection", "{0} checked / {1} matching targets in {2} Blueprints (collapsed children included)"), Count, MatchingRows.Num(), Assets.Num());
+    return FText::Format(LOCTEXT("Selection", "Checked: {0} / {1} matches | Blueprints with checks: {2}"), Count, MatchingRows.Num(), Assets.Num());
 }
 
 FReply SBlueprintTagManager::CheckMatches(bool bChecked)

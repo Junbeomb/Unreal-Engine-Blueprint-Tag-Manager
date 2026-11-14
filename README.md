@@ -1,4 +1,4 @@
-# Blueprint Tag Manager 1.0.5
+# Blueprint Tag Manager 1.0.6
 
 ![Blueprint Tag Manager editor panel](docs/images/blueprint-tag-manager.png)
 
@@ -25,13 +25,17 @@ A project-wide Unreal Engine editor tool for **Actor Tags** and **Component Tags
 
 **Refresh tags** re-reads loaded results after external changes; **Scan project** discovers newly added, renamed, or removed assets. Compile, Undo/Redo, and property changes trigger a refresh. Editing is disabled during Play/Simulate.
 
-The panel separates **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview** with labeled sections. Drag the dividers to resize the section heights and widths. Drag table header dividers to resize columns. Reduced control sections can be scrolled; size adjustments remain in the current panel session.
+The panel separates **Project scan**, **Search**, **Filters**, **Blueprints & components**, **Tag inventory**, **Batch edit**, and **Change preview** with labeled sections. The four main rows default to approximately **16% / 47% / 21% / 16%**, giving more height to the Blueprint list. Horizontal proportions are unchanged. Drag the dividers to resize section heights and widths, or table headers to resize columns. Reduced control sections can be scrolled; adjustments remain in the current panel session.
+
+The list toolbar separates **Selection** from **List controls**. **Check matches**, **Uncheck matches**, and the current checked/matching counts sit together; **Blueprints with checks** counts selected assets. Refresh/expand/collapse sit in their own group. **Thumbnails** has a separate heading, with **Show** switches and an **Image size** group below it.
+
+**Project scan > Recent folders** stores the five most recent unique content folder paths confirmed with **Enter** or by starting **Scan project** with a valid scope, newest first. Click a path button to fill **Content folder**, then scan when ready; selecting a history entry does not start a scan. The **X** on its right removes it without clearing the current input. Blank scope and invalid/out-of-project paths are not stored. History survives panel/editor restarts in the project's local editor user settings under **Saved/Config**, which are excluded from Git and release archives.
 
 In **Blueprints & components > Thumbnails**, independently toggle **Blueprints** and **Static Mesh components**. Both default to **off**; enable either or both. Blueprint group rows show the Blueprint asset thumbnail. Component rows show their effective assigned Static Mesh asset, including ISM, HISM, inherited overrides, and native components. Unassigned meshes and other component types show **No image** when component thumbnails are enabled; Actor Tags keep their normal text row. Choose **16x16**, **32x32** (default), or **64x64** for both types. Display settings remain in the current panel session and preserve filters, checks, expansion, and edit previews. Thumbnails are requested only for visible rows when enabled; real-time hover rendering is disabled.
 
 ## Install a release ZIP
 
-Download **BlueprintTagManager-1.0.5-UE5.0-5.8-Win64.zip** and extract it. Close the project's Unreal Editor, then run this command from the extracted folder, substituting your own project and engine paths:
+Download **BlueprintTagManager-1.0.6-UE5.0-5.8-Win64.zip** and extract it. Close the project's Unreal Editor, then run this command from the extracted folder, substituting your own project and engine paths:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\Install-BlueprintTagManager.ps1 -ProjectFile 'D:\Projects\MyGame\MyGame.uproject' -EngineRoot 'C:\Program Files\Epic Games\UE_5.3'

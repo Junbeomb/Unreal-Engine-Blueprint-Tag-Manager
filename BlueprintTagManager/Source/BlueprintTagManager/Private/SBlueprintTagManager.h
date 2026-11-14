@@ -3,7 +3,9 @@
 #include "BlueprintTagProject.h"
 #include "BlueprintTagService.h"
 #include "BlueprintTagView.h"
+#include "BlueprintTagRecentFolders.h"
 #include "EditorUndoClient.h"
+#include "Types/SlateEnums.h"
 #include "UObject/StrongObjectPtr.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Views/SListView.h"
@@ -11,6 +13,7 @@
 
 class SEditableTextBox;
 class FAssetThumbnailPool;
+class SWrapBox;
 
 struct FBlueprintTagThumbnailOptions
 {
@@ -30,7 +33,9 @@ struct FBlueprintTagInventoryRow
 class SBlueprintTagManager : public SCompoundWidget, public FEditorUndoClient
 {
 public:
-    SLATE_BEGIN_ARGS(SBlueprintTagManager) {} SLATE_END_ARGS()
+    SLATE_BEGIN_ARGS(SBlueprintTagManager) {}
+        SLATE_ARGUMENT(FString, RecentFoldersConfig)
+    SLATE_END_ARGS()
     void Construct(const FArguments& InArgs);
     virtual ~SBlueprintTagManager() override;
     virtual void Tick(const FGeometry& Geometry, double CurrentTime, float DeltaTime) override;
@@ -52,6 +57,7 @@ public:
     static UObject* ResolveThumbnailAsset(const FBlueprintTagOwnerRow& Row);
 
 private:
+    friend class FBlueprintTagRecentFoldersTest;
     bool CanWork() const;
     bool CanEditResults() const { return CanWork() && bHasScanned && !IsScanInProgress(); }
     void BeginScan();
@@ -71,6 +77,11 @@ private:
     FReply OpenBlueprint(TSharedPtr<FBlueprintTagOwnerRow> Item);
     FText GetScanText() const;
     FText GetSelectionText() const;
+    void OnFolderCommitted(const FText& Text, ETextCommit::Type CommitType);
+    void RememberFolder(const FString& Folder);
+    void RebuildRecentFolders();
+    FReply UseRecentFolder(FString Folder);
+    FReply RemoveRecentFolder(FString Folder);
     TSharedRef<ITableRow> MakeOwnerRow(TSharedPtr<FBlueprintTagOwnerRow> Item, const TSharedRef<STableViewBase>& Owner);
     TSharedRef<ITableRow> MakeInventoryRow(TSharedPtr<FBlueprintTagInventoryRow> Item, const TSharedRef<STableViewBase>& Owner);
 
@@ -90,11 +101,13 @@ private:
     TSharedPtr<SListView<TSharedPtr<FBlueprintTagInventoryRow>>> InventoryList;
     TSharedPtr<SListView<TSharedPtr<FString>>> PreviewList;
     TSharedPtr<SEditableTextBox> FolderInput;
+    TSharedPtr<SWrapBox> RecentFoldersBox;
     TSharedPtr<SEditableTextBox> AddTagInput;
     TSharedPtr<SEditableTextBox> OldTagInput;
     TSharedPtr<SEditableTextBox> NewTagInput;
     FBlueprintTagFilter SearchFilter;
     FBlueprintTagThumbnailOptions ThumbnailOptions;
+    FBlueprintTagRecentFolders RecentFolderHistory;
     FCheckBoxStyle ExcludeToggleStyle;
     FText Status;
     FString ScanFailures;

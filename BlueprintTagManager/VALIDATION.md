@@ -1,6 +1,6 @@
-# Blueprint Tag Manager 1.0.5 - Validation Record
+# Blueprint Tag Manager 1.0.6 - Validation Record
 
-- Validation date: 2026-11-12 (Korea Standard Time).
+- Validation date: 2026-11-14 (Korea Standard Time).
 - Platform: Windows 11 x64, Epic Games Launcher engine installations.
 - Source target: Unreal Engine **5.0 through 5.8**.
 - Executed verification is limited to **5.3.2, 5.5.4, and 5.7.4**. No additional engines were installed or executed. Other versions are unverified source targets.
@@ -9,14 +9,21 @@
 
 | Engine | MSVC | Windows SDK | Source build | Automation |
 | --- | --- | --- | --- | --- |
-| 5.3.2 | 14.38.33145 | 10.0.26100.0 | Passed | 9 passed, 0 warnings, 0 failed, 0 not run |
-| 5.5.4 | 14.44.35220 | 10.0.22621.0 | Passed | 9 passed, 0 warnings, 0 failed, 0 not run |
-| 5.7.4 | 14.44.35220 | 10.0.22621.0 | Passed | 9 passed, 0 warnings, 0 failed, 0 not run |
+| 5.3.2 | 14.38.33145 | 10.0.26100.0 | Passed | 10 passed, 0 warnings, 0 failed, 0 not run |
+| 5.5.4 | 14.44.35220 | 10.0.22621.0 | Passed | 10 passed, 0 warnings, 0 failed, 0 not run |
+| 5.7.4 | 14.44.35220 | 10.0.22621.0 | Passed | 10 passed, 0 warnings, 0 failed, 0 not run |
 | 5.0, 5.1, 5.2, 5.4, 5.6, 5.8 | Not tested | Not tested | Not executed | Not executed |
 
-Each engine compiled the same Source and Config files in a fresh HostProject and ran the nine-test suite with NullRHI / RenderOffscreen. UE 5.3 explicitly selected toolset directory 14.38.33130, whose compiler reports 14.38.33145. UE 5.5 and 5.7 selected 14.44.35207, whose compiler reports 14.44.35220. Both toolsets remain installed; no global compiler preference was changed.
+Each engine compiled the same Source and Config files in a fresh HostProject and ran the ten-test suite with NullRHI / RenderOffscreen. UE 5.3 explicitly selected toolset directory 14.38.33130, whose compiler reports 14.38.33145. UE 5.5 and 5.7 selected 14.44.35207, whose compiler reports 14.44.35220. Both toolsets remain installed; no global compiler preference was changed.
 
 The plugin module disables PCH and Unity while preserving the engine's precompiled target layout. UE 5.5 emits compiler-version notices with MSVC 14.44. Zero warnings above refers to automation results, not a claim that engine logs contain no notices. Engine source files were not modified.
+
+## Layout and recent folder history
+
+- The four main rows default to 16% / 47% / 21% / 16%, with existing horizontal proportions and draggable splitters retained. Reduced control panels remain scrollable.
+- Selection buttons and their checked/matching count share a group. Refresh/expand/collapse occupy a separate List controls group. Thumbnails has its own heading and separate Show and Image size controls.
+- Recent folders keeps five unique, normalized project content paths, newest first. Enter or an accepted Scan project scope records a path; recalling one only fills Content folder. X deletes the entry without changing the input. Blank scope and invalid paths are excluded.
+- History uses local per-project editor user settings under Saved/Config. Tests use isolated temporary INI files under the test project's Saved directory, preserving other settings and avoiding changes to an existing user's history. History is excluded from public packages and Git.
 
 ## Thumbnail feature
 
@@ -40,23 +47,24 @@ The plugin module disables PCH and Unity while preserving the engine's precompil
 | ProjectDiscovery | Saved/unloaded assets, folder boundaries, reading defaults without Blueprint editors, and non-Actor asset handling |
 | ViewFiltering | Search combinations, selection scope, tag-presence cases, all-tagged status, and summaries of shown component tags only |
 | StaticMeshFilter | Class detection, independent ISM/HISM exclusions, 24 type/exclusion/presence combinations, summaries, batch scope, and inherited/native components |
+| RecentFolders | Five-entry MRU ordering, normalization and case-insensitive deduplication, invalid-path rejection, disk reload and persistent removal, preservation of unrelated settings, per-file isolation, input-only recall, Enter confirmation, and no automatic scan |
 | ThumbnailDisplay | Default-off switches, 12 display combinations, exact asset resolution, missing assets, child overrides, native meshes, and preservation of selection/scope/expansion/tags |
 
-Full names start with BlueprintTagManager. followed by the test name above. Build scripts require all nine tests to pass with no warnings or skipped tests.
+Full names start with BlueprintTagManager. followed by the test name above. Build scripts require all ten tests to pass with no warnings or skipped tests.
 
 ## Unified ZIP installation and rendered UI
 
-The unified ZIP was extracted, and its installer selected the matching prebuilt profile for each installed engine in a new, empty project. The plugin loaded without recompilation. All nine tests passed again with actual rendering:
+The unified ZIP was extracted, and its installer selected the matching prebuilt profile for each installed engine in a new, empty project. The plugin loaded without recompilation. All ten tests passed again with actual rendering:
 
 | Engine | Rendering mode | Installation automation |
 | --- | --- | --- |
-| 5.3.2 | Direct3D 11 / RenderOffscreen | 9 passed, 0 warnings, 0 failed, 0 not run |
-| 5.5.4 | Direct3D 12 / RenderOffscreen | 9 passed, 0 warnings, 0 failed, 0 not run |
-| 5.7.4 | Direct3D 11 / RenderOffscreen | 9 passed, 0 warnings, 0 failed, 0 not run |
+| 5.3.2 | Direct3D 11 / RenderOffscreen | 10 passed, 0 warnings, 0 failed, 0 not run |
+| 5.5.4 | Direct3D 12 / RenderOffscreen | 10 passed, 0 warnings, 0 failed, 0 not run |
+| 5.7.4 | Direct3D 11 / RenderOffscreen | 10 passed, 0 warnings, 0 failed, 0 not run |
 
-Rendered runs used -BTMCaptureUI. In addition to idle, exclusion, and expanded-list captures, ThumbnailDisplay captured both switches off, Blueprint-only, component-only, and both-on at 16, 32, and 64 pixels. Latent capture commands yield normal editor frames so the engine pool can render actual Blueprint and mesh previews. The fixture includes a cube, sphere, cone, non-mesh component, and unassigned StaticMesh/ISM/HISM components.
+Rendered runs used -BTMCaptureUI. RecentFolders captured five path buttons and the state after deleting one, in a window sized to match the supplied layout reference. In addition to idle, exclusion, and expanded-list captures, ThumbnailDisplay captured both switches off, Blueprint-only, component-only, and both-on at 16, 32, and 64 pixels. Latent capture commands yield normal editor frames so the engine pool can render actual Blueprint and mesh previews. The fixture includes a cube, sphere, cone, non-mesh component, and unassigned StaticMesh/ISM/HISM components.
 
-Captures were reviewed for correct assets, independent visibility, sizing, readable No image labels, and preserved checks/expansion. Captures and logs are excluded from the release. Final profile DLLs match those used in these installation runs.
+Captures were reviewed for the default 16% / 47% / 21% / 16% row proportions, Selection/List controls separation, the nearby checked count, Thumbnails > Show/Image size hierarchy, recent path buttons and removal, correct assets, independent visibility, sizing, readable No image labels, and preserved checks/expansion. Captures and logs are excluded from the release. Final profile DLLs match those used in these installation runs.
 
 ## Compatibility and installer
 
@@ -68,7 +76,7 @@ Captures were reviewed for correct assets, independent visibility, sizing, reada
 
 ## Release checks
 
-VersionName is **1.0.5**, with internal Version **6**. English README and validation documents, scripts, common source/configuration, and the MIT license are included.
+VersionName is **1.0.6**, with internal Version **7**. English README and validation documents, scripts, common source/configuration, and the MIT license are included.
 
 Public release checks inspect Git-visible files and ZIP entries for private profile paths and known token patterns. DLL checks also reject embedded absolute Windows paths; compiler diagnostic paths are trimmed to relative paths. Logs, PDBs, HostProjects, build intermediates, caches, Git metadata, and nested ZIPs are excluded. Pattern checks are not an exhaustive secret detector.
 
